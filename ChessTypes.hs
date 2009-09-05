@@ -5,11 +5,11 @@ import Data.Map (Map)
 type Square = (Int, Int)
 
 data Piece = Piece PieceType Color
-             deriving (Eq)
+             deriving (Eq, Ord)
 data PieceType = King | Queen | Rook | Bishop | Knight | Pawn
-               deriving (Eq, Show)
+               deriving (Eq, Show, Ord)
 data Color = Black | White
-           deriving (Eq, Show)
+           deriving (Eq, Show, Ord)
 
 data Position = Position Board GameState
 type Board = Map Square Piece
