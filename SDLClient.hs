@@ -50,7 +50,6 @@ drawPiece (col, row) piece = do
   liftIO $ SDL.blitSurface img Nothing screen (Just $ SDL.Rect x y 0 0)
     where x = (col - 1) * squareSidePx
           y = (8 - row) * squareSidePx
-     
 
 loadPiecesImages = M.fromList <$> mapM loadPieceImage pieces
   where pieceTypes = [King, Queen, Rook, Bishop, Knight, Pawn]

@@ -17,9 +17,10 @@ data GameState = GameState () -- may be used for castling and/or en passant
 
 boardToPosition = flip Position (GameState ())
 
-data Move = StandardMove { movePiece :: PieceType,
+data Move = KingsideCastling
+          | QueensideCastling
+          | StandardMove { movePiece :: PieceType,
                            moveOrig :: Square,
                            moveDest :: Square
                          }
-          | KingsideCastling
-          | QueensideCastling
+            deriving (Show)
