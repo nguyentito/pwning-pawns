@@ -21,6 +21,5 @@ data Move = KingsideCastling
           | QueensideCastling
           | StandardMove { movePiece :: PieceType,
                            moveOrig :: Square,
-                           moveDest :: Square
-                         }
+                           moveDest :: Square }
             deriving (Show)
