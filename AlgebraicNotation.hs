@@ -1,4 +1,4 @@
-module AlgebraicNotationParser (parseMove) where
+module AlgebraicNotation (parseMove, printMove) where
 
 import Control.Applicative
 import Data.Char
@@ -7,6 +7,8 @@ import Text.Parsec hiding ((<|>))
 import Text.Parsec.String
 
 import ChessTypes
+
+pieceLetterAssocList = zip [King, Queen, Rook, Bishop, Knight] "KQRBN"
 
 parseMove str = case parse p_move "" str of
                   Left err -> error $ show err
@@ -22,12 +24,20 @@ p_kingsideCastling = KingsideCastling <$ string "0-0"
 
 p_standardMove = StandardMove <$> p_pieceType <*> p_square <*> (p_separator *> p_square)
 
-p_pieceType = choice (zipWith (<$) [King, Queen, Rook, Bishop, Knight]
-                                   (map char "KQRBN"))
-          <|> return Pawn
+p_pieceType = choice (map (\(piece, letter) -> piece <$ char letter) pieceLetterAssocList)
+            <|> return Pawn
        
 p_square = (,) <$> p_col <*> p_row
 p_col = (+1) . (flip (-) (ord 'a')) . ord <$> oneOf ['a'..'h']
 p_row = digitToInt <$> oneOf ['1'..'8']
 
 p_separator = char '-' <|> char 'x'
+
+printMove KingsideCastling = "0-0"
+printMove QueensideCastling = "0-0-0"
+printMove (StandardMove pieceType (origCol, origRow) (destCol, destRow)) =
+    maybe const (:) (lookup pieceType pieceLetterAssocList) $
+    [ colToChar origCol, rowToChar origRow, '-',
+      colToChar destCol, rowToChar destCol ]
+        where colToChar = chr . (+ (ord a)) . (flip (-) 1)
+              rowToChar = intToDigit
