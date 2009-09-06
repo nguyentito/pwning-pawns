@@ -13,6 +13,7 @@ import qualified Data.Foldable as F
 import qualified Graphics.UI.SDL as SDL
 import qualified Graphics.UI.SDL.Image as IMG
 
+import AlgebraicNotation
 import ChessTypes
 import Common
 
@@ -37,6 +38,10 @@ mainLoop :: ReaderT AppData (StateT AppState IO) ()
 mainLoop = do
   events <- liftIO pollEvents
   unless (SDL.Quit `elem` events) $ do
+    moveChanIsEmpty <- liftIO . isEmptyChan =<< asks moveChan
+    unless moveChanIsEmpty $ do
+      moveStr <- liftIO . readChan =<< asks moveChan
+      modify (\(AppState position) -> AppState $ applyMove (parseMove moveStr) White position)
     drawBoard
     drawPosition =<< gets position
     (liftIO . SDL.flip) =<< asks screen

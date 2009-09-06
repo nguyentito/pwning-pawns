@@ -36,8 +36,8 @@ p_separator = char '-' <|> char 'x'
 printMove KingsideCastling = "0-0"
 printMove QueensideCastling = "0-0-0"
 printMove (StandardMove pieceType (origCol, origRow) (destCol, destRow)) =
-    maybe const (:) (lookup pieceType pieceLetterAssocList) $
+    maybe id (:) (lookup pieceType pieceLetterAssocList) $
     [ colToChar origCol, rowToChar origRow, '-',
       colToChar destCol, rowToChar destCol ]
-        where colToChar = chr . (+ (ord a)) . (flip (-) 1)
+        where colToChar = chr . (+ (ord 'a')) . (flip (-) 1)
               rowToChar = intToDigit
