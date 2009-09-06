@@ -1,6 +1,10 @@
+module SDLClient (mainSDL) where
+
+import Control.Concurrent
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Char
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -15,18 +19,26 @@ import Common
 squareSidePx = 96
 boardSidePx = squareSidePx * 8
 
-data AppData = AppData { screen :: SDL.Surface, piecesImagesMap :: Map Piece SDL.Surface }
+data AppData = AppData {
+      screen :: SDL.Surface,
+      piecesImagesMap :: Map Piece SDL.Surface,
+      moveChan :: Chan String
+    }
 
-main = SDL.withInit [SDL.InitVideo] $ do
+data AppState = AppState { position :: Position }
+
+mainSDL :: Chan String -> IO ()
+mainSDL moveChan = SDL.withInit [SDL.InitVideo] $ do
   screen <- SDL.setVideoMode boardSidePx boardSidePx 0 [SDL.HWSurface, SDL.DoubleBuf]
   piecesImagesMap <- loadPiecesImages
-  runReaderT mainLoop (AppData screen piecesImagesMap)
+  evalStateT (runReaderT mainLoop (AppData screen piecesImagesMap moveChan)) (AppState startingPosition)
   
+mainLoop :: ReaderT AppData (StateT AppState IO) ()
 mainLoop = do
   events <- liftIO pollEvents
   unless (SDL.Quit `elem` events) $ do
     drawBoard
-    drawPosition startingPosition
+    drawPosition =<< gets position
     (liftIO . SDL.flip) =<< asks screen
     mainLoop
 

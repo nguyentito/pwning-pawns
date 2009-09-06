@@ -25,6 +25,6 @@ applyMove (StandardMove pieceType orig dest) color (Position board _) =
     boardToPosition $ M.insert dest (Piece pieceType color) . M.delete orig $ board
 
 legalMoves :: Piece -> Square -> Position -> [Move]
-legalMoves Pawn orig@(origCol, origRow) _ =
-    [Move { moveOrig=orig, moveDest=(origCol, origRow+1), movePiece=Pawn }]
+legalMoves (Piece Pawn _) orig@(origCol, origRow) _ =
+    [StandardMove { moveOrig=orig, moveDest=(origCol, origRow+1), movePiece=Pawn }]
 
