@@ -13,12 +13,14 @@ data Color = Black | White
 
 data Position = Position Board GameState
 type Board = Map Square Piece
-data GameState = GameState () -- may be used for castling and/or en passant
+data GameState = GameState {
+      castlingMap :: Map (Color, CastlingSide) Bool
+    }
 
 boardToPosition = flip Position (GameState ())
 
-data Move = KingsideCastling
-          | QueensideCastling
+data Move = Castling CastlingSide
+          | EnPassant { moveOrig :: Square, targetCol :: Int }
           | StandardMove { movePiece :: PieceType,
                            moveOrig :: Square,
                            moveDest :: Square }
