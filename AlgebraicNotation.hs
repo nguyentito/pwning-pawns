@@ -20,7 +20,7 @@ p_move = try p_queensideCastling
      <|> p_standardMove
 
 p_queensideCastling = (Castling Queenside) <$ string "0-0-0"
-p_kingsideCastling = (Castling KingSide) <$ string "0-0"
+p_kingsideCastling = (Castling Kingside) <$ string "0-0"
 
 p_standardMove = StandardMove <$> p_pieceType <*> p_square <*> (p_separator *> p_square)
 

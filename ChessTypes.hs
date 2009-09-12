@@ -1,6 +1,7 @@
 module ChessTypes where
 
 import Data.Map (Map)
+import qualified Data.Map as M (fromList)
 
 type Square = (Int, Int)
 
@@ -17,12 +18,13 @@ data GameState = GameState {
       castlingMap :: Map (Color, CastlingSide) Bool
     }
 
-boardToPosition = flip Position (GameState (M.fromList [((White, Kingside), False)
-                                                        ((White, Queenside), False),
-                                                        ((Black, Kingside), False),
-                                                        ((Black, Queenside), False)]
+boardToPosition = flip Position (GameState (M.fromList [((White, Kingside), True),
+                                                        ((White, Queenside), True),
+                                                        ((Black, Kingside), True),
+                                                        ((Black, Queenside), True)]))
 
 data CastlingSide = Queenside | Kingside
+                    deriving (Eq, Show, Ord)
 
 data Move = Castling CastlingSide
           | EnPassant { moveOrig :: Square, targetCol :: Int }

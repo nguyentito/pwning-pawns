@@ -20,11 +20,31 @@ startingPosition = boardToPosition . M.fromList $
 
 applyMove :: Move -> Color -> Position -> Position
 
-applyMove (Castling _) _ _ = undefined
-
+applyMove (Castling side) color (Position oldBoard oldState) = 
+    Position newBoard newState
+    where newState = oldState {castlingMap=newCastlingMap}
+          newCastlingMap = M.fromList [((color, Kingside), False), ((color, Queenside), True)]
+                           `M.union` castlingMap oldState
+          newBoard = M.insert (newRookCol, row) (Piece Rook color) .
+                     M.insert (newKingCol, row) (Piece King color) .
+                     M.delete (oldRookCol, row) .
+                     M.delete (oldKingCol, row) $
+                     oldBoard
+          row = case color of
+                  White -> 1
+                  Black -> 8
+          oldKingCol = 5
+          (oldRookCol) = case side of
+                           Kingside -> 8
+                           Queenside -> 1
+          (newKingCol, newRookCol) = case side of
+                                       Kingside -> (7, 6)
+                                       Queenside -> (3, 4)
 
 applyMove (StandardMove pieceType orig dest) color (Position board _) =
     boardToPosition $ M.insert dest (Piece pieceType color) . M.delete orig $ board
+
+applyMove (EnPassant _ _) _ _ = undefined
 
 legalMoves :: Piece -> Square -> Position -> [Move]
 legalMoves (Piece Pawn _) orig@(origCol, origRow) _ =
