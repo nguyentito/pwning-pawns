@@ -41,7 +41,7 @@ mainLoop = do
     moveChanIsEmpty <- liftIO . isEmptyChan =<< asks moveChan
     unless moveChanIsEmpty $ do
       moveStr <- liftIO . readChan =<< asks moveChan
-      modify (\(AppState position) -> AppState $ applyMove (parseMove moveStr) White position)
+      modify (\st -> st { position = applyMove (parseMove moveStr) White (position st) })
     drawBoard
     drawPosition =<< gets position
     (liftIO . SDL.flip) =<< asks screen

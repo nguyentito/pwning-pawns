@@ -47,6 +47,8 @@ applyMove (StandardMove pieceType orig dest) color (Position board _) =
 applyMove (EnPassant _ _) _ _ = undefined
 
 legalMoves :: Piece -> Square -> Position -> [Move]
+
 legalMoves (Piece Pawn _) orig@(origCol, origRow) _ =
     [StandardMove { moveOrig=orig, moveDest=(origCol, origRow+1), movePiece=Pawn }]
 
+legalMoves _ _ _ = []
