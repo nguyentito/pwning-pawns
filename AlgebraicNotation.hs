@@ -19,8 +19,8 @@ p_move = try p_queensideCastling
      <|> try p_kingsideCastling
      <|> p_standardMove
 
-p_queensideCastling = QueensideCastling <$ string "0-0-0"
-p_kingsideCastling = KingsideCastling <$ string "0-0"
+p_queensideCastling = (Castling Queenside) <$ string "0-0-0"
+p_kingsideCastling = (Castling KingSide) <$ string "0-0"
 
 p_standardMove = StandardMove <$> p_pieceType <*> p_square <*> (p_separator *> p_square)
 
@@ -33,8 +33,8 @@ p_row = digitToInt <$> oneOf ['1'..'8']
 
 p_separator = char '-' <|> char 'x'
 
-printMove KingsideCastling = "0-0"
-printMove QueensideCastling = "0-0-0"
+printMove (Castling Kingside) = "0-0"
+printMove (Castling Queenside) = "0-0-0"
 printMove (StandardMove pieceType (origCol, origRow) (destCol, destRow)) =
     maybe id (:) (lookup pieceType pieceLetterAssocList) $
     [ colToChar origCol, rowToChar origRow, '-',

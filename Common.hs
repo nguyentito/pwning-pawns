@@ -19,7 +19,10 @@ startingPosition = boardToPosition . M.fromList $
                   where f colNumber pieceType = ((colNumber, rowNumber), Piece pieceType color)
 
 applyMove :: Move -> Color -> Position -> Position
+
 applyMove (Castling _) _ _ = undefined
+
+
 applyMove (StandardMove pieceType orig dest) color (Position board _) =
     boardToPosition $ M.insert dest (Piece pieceType color) . M.delete orig $ board
 

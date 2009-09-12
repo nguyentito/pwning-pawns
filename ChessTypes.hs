@@ -17,7 +17,12 @@ data GameState = GameState {
       castlingMap :: Map (Color, CastlingSide) Bool
     }
 
-boardToPosition = flip Position (GameState ())
+boardToPosition = flip Position (GameState (M.fromList [((White, Kingside), False)
+                                                        ((White, Queenside), False),
+                                                        ((Black, Kingside), False),
+                                                        ((Black, Queenside), False)]
+
+data CastlingSide = Queenside | Kingside
 
 data Move = Castling CastlingSide
           | EnPassant { moveOrig :: Square, targetCol :: Int }
