@@ -1,4 +1,8 @@
-module Common (startingPosition, applyMove, legalMoves) where
+module Common (startingPosition,
+               applyMove,
+               legalMoves,
+               legalMovesMap)
+where
 
 import Control.Applicative
 import Data.List
@@ -41,7 +45,6 @@ applyMove (Castling side) color (Position oldBoard oldState) =
                      oldBoard
           row = castlingRow color
 
-
 applyMove (StandardMove pieceType orig dest) color (Position oldBoard oldState) =
     makePositionWithNewState $
     M.insert dest (Piece pieceType color) .
@@ -67,7 +70,17 @@ applyMove (EnPassant _ _) _ _ = undefined
 -- legalMoves section
 --
 
-legalMoves :: Piece -> Square -> Position -> [Move]
+legalMovesMap :: Piece -> Square -> Position -> Map Square Move
+legalMovesMap piece@(Piece _ color) square position = M.fromList assocList
+    where assocList = map f moves
+          f = (,) <$> associatedSquare color <*> id
+          moves = legalMoves piece square position
+
+associatedSquare :: Color -> Move -> Square -- depends on color just b/c of castling
+associatedSquare (StandardMove {moveDest=dest}) = dest
+associatedSquare (Castling side) = (castlingKingDestCol side, castlingRow color)
+
+legalMoves :: Piece -> Square -> Position -> [Move] -- not a MoveFunction
 legalMoves piece@(Piece pieceType _) = legalMoves' pieceType piece
 
 type MoveFunction = Piece -> Square -> Position -> [Move]
@@ -78,8 +91,7 @@ legalMoves' Pawn = pawnMoves
     
 legalMoves' King = simpleMovement omniDir `concatMoves` castlingPossibilities
 
-legalMoves' Knight  = simpleMovement $ ((,) <$> pm1 <*> pm2) ++
-                                       ((,) <$> pm2 <*> pm1)
+legalMoves' Knight  = simpleMovement $ [(,), flip (,)] <*> pm1 <*> pm2
     where pm2 = [(+) 2, flip (-) 2]
 
 legalMoves' Queen = linearMovement omniDir
