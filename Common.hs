@@ -6,6 +6,7 @@ where
 
 import Control.Applicative
 import Data.List
+import Data.Maybe
 import Data.Map (Map)
 import qualified Data.Map as M
 
@@ -77,8 +78,9 @@ legalMovesMap piece@(Piece _ color) square position = M.fromList assocList
           moves = legalMoves piece square position
 
 associatedSquare :: Color -> Move -> Square -- depends on color just b/c of castling
-associatedSquare (StandardMove {moveDest=dest}) = dest
-associatedSquare (Castling side) = (castlingKingDestCol side, castlingRow color)
+associatedSquare color (StandardMove {moveDest=dest}) = dest
+associatedSquare color (Castling side) = (castlingKingDestCol side, castlingRow color)
+
 
 legalMoves :: Piece -> Square -> Position -> [Move] -- not a MoveFunction
 legalMoves piece@(Piece pieceType _) = legalMoves' pieceType piece
@@ -98,13 +100,15 @@ legalMoves' Queen = linearMovement omniDir
 legalMoves' Rook = linearMovement orthogonalDir
 legalMoves' Bishop = linearMovement diagonalDir
 
+
+type MoveSquareDiff = (Int -> Int, Int -> Int)
+
 orthogonalDir, diagonalDir, omniDir :: [MoveSquareDiff]
 orthogonalDir = [(,), flip (,)] <*> pure id <*> pm1
 diagonalDir = (,) <$> pm1 <*> pm1
 omniDir = orthogonalDir ++ diagonalDir
 pm1 = [(+) 1, flip (-) 1]
 
-type MoveSquareDiff = (Int -> Int, Int -> Int)
 
 simpleMovement :: [MoveSquareDiff] -> MoveFunction
 simpleMovement mvts (Piece pieceType color) orig (Position board _) =
@@ -120,8 +124,6 @@ linearMovement mvts (Piece pieceType color) orig (Position board _) =
                           iterate (applyDiff mvtDiff) $
                           orig
 
-concatMoves :: MoveFunction -> MoveFunction -> MoveFunction
-concatMoves f g = \a b c -> f a b c ++ g a b c
 
 castlingPossibilities :: MoveFunction
 castlingPossibilities (Piece _ color) _ (Position _ state) =
@@ -130,10 +132,35 @@ castlingPossibilities (Piece _ color) _ (Position _ state) =
                                       == Just True
 
 pawnMoves :: MoveFunction
-pawnMoves = undefined
+pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
+    -- will add en passant later
+    map (makeStandardMove pieceType orig) . catMaybes $
+    maybeDoubleAdvanceMvt : maybeAdvanceMvt : captureMvts
+        where vDiff = case color of White -> ((+) 1);
+                                    Black -> flip (-) 1
+              maybeAdvanceMvt = maybeNonCaptureMvt (vDiff, id)
+              maybeDoubleAdvanceMvt
+                  | origRow == pawnRow = maybeNonCaptureMvt (vDiff . vDiff, id)
+                  | otherwise = Nothing
+              maybeNonCaptureMvt diff | destIsEmpty && (not outOfBounds) = Just dest
+                                      | otherwise = Nothing
+                  where dest@(destCol, destRow) = applyDiff diff orig
+                        destIsEmpty = dest `M.notMember` board
+                        outOfBounds = destCol < 1 || destCol > 8 ||
+                                      destRow < 1 || destRow > 8
+              captureMvts = filter hasEnemy . map (flip applyDiff orig) $
+                            ((,) vDiff) <$> pm1
+                  where hasEnemy square = case M.lookup square board of
+                                            Just (Piece _ occupyingPieceColor)
+                                                | occupyingPieceColor /= color -> True
+                                            _ -> False
+                        
 
 applyDiff :: MoveSquareDiff -> Square -> Square
 applyDiff (vDiff, hDiff) (origCol, origRow) = (vDiff origCol, hDiff origRow)
+
+concatMoves :: MoveFunction -> MoveFunction -> MoveFunction
+concatMoves f g = \a b c -> f a b c ++ g a b c
 
 canLandOn movingPieceColor board square@(row, col)
     | row < 1 || row > 8 || col < 1 || col > 8 = False
