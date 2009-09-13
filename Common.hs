@@ -1,4 +1,4 @@
-module Common where
+module Common (startingPosition, applyMove, legalMoves) where
 
 import Control.Applicative
 import Data.List
@@ -6,6 +6,10 @@ import Data.Map (Map)
 import qualified Data.Map as M
 
 import ChessTypes
+
+--
+-- startingPosition section
+--
 
 startingPosition :: Position
 startingPosition = boardToPosition . M.fromList $
@@ -19,6 +23,10 @@ startingPosition = boardToPosition . M.fromList $
               zipWith f [1..] pieceTypeList
                   where f colNumber pieceType = ((colNumber, rowNumber), Piece pieceType color)
 
+--
+-- applyMove section
+--
+
 applyMove :: Move -> Color -> Position -> Position
 
 applyMove (Castling side) color (Position oldBoard oldState) = 
@@ -26,21 +34,13 @@ applyMove (Castling side) color (Position oldBoard oldState) =
     where newState = oldState {castlingMap=newCastlingMap}
           newCastlingMap = M.fromList [((color, side), False) | side <- [Kingside, Queenside]]
                            `M.union` castlingMap oldState
-          newBoard = M.insert (newRookCol, row) (Piece Rook color) .
-                     M.insert (newKingCol, row) (Piece King color) .
-                     M.delete (oldRookCol, row) .
-                     M.delete (oldKingCol, row) $
+          newBoard = M.insert (castlingRookDestCol side, row) (Piece Rook color) .
+                     M.insert (castlingKingDestCol side, row) (Piece King color) .
+                     M.delete (castlingRookOrigCol side, row) .
+                     M.delete (castlingKingOrigCol     , row) $
                      oldBoard
-          row = case color of
-                  White -> 1
-                  Black -> 8
-          oldKingCol = 5
-          (oldRookCol) = case side of
-                           Kingside -> 8
-                           Queenside -> 1
-          (newKingCol, newRookCol) = case side of
-                                       Kingside -> (7, 6)
-                                       Queenside -> (3, 4)
+          row = castlingRow color
+
 
 applyMove (StandardMove pieceType orig dest) color (Position oldBoard oldState) =
     makePositionWithNewState $
@@ -63,6 +63,10 @@ applyMove (StandardMove pieceType orig dest) color (Position oldBoard oldState) 
 
 applyMove (EnPassant _ _) _ _ = undefined
 
+--
+-- legalMoves section
+--
+
 legalMoves :: Piece -> Square -> Position -> [Move]
 legalMoves piece@(Piece pieceType _) = legalMoves' pieceType piece
 
@@ -83,7 +87,7 @@ legalMoves' Rook = linearMovement orthogonalDir
 legalMoves' Bishop = linearMovement diagonalDir
 
 orthogonalDir, diagonalDir, omniDir :: [MoveSquareDiff]
-orthogonalDir = map ((,) id) pm1 ++ map (flip (,) id) pm1
+orthogonalDir = [(,), flip (,)] <*> pure id <*> pm1
 diagonalDir = (,) <$> pm1 <*> pm1
 omniDir = orthogonalDir ++ diagonalDir
 pm1 = [(+) 1, flip (-) 1]
@@ -125,3 +129,21 @@ canLandOn movingPieceColor board square@(row, col)
                     Just (Piece _ occupyingPieceColor)
                         | occupyingPieceColor == movingPieceColor -> False
                     _ -> True
+
+--
+-- Castling rules section
+--
+
+castlingRow White = 1
+castlingRow Black = 8
+
+castlingKingOrigCol = 5
+
+castlingRookOrigCol Kingside = 8
+castlingRookOrigCol Queenside = 1
+
+castlingKingDestCol Kingside = 7
+castlingKingDestCol Queenside = 3
+
+castlingRookDestCol Kingside = 6
+castlingRookDestCol Queenside = 4
