@@ -32,3 +32,5 @@ data Move = Castling CastlingSide
                            moveOrig :: Square,
                            moveDest :: Square }
             deriving (Show)
+
+makeStandardMove = StandardMove
