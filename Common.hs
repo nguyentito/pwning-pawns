@@ -138,9 +138,9 @@ pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
     maybeDoubleAdvanceMvt : maybeAdvanceMvt : map Just captureMvts
         where vDiff = case color of White -> ((+) 1);
                                     Black -> flip (-) 1
-              maybeAdvanceMvt = maybeNonCaptureMvt (vDiff, id)
+              maybeAdvanceMvt = maybeNonCaptureMvt (id, vDiff)
               maybeDoubleAdvanceMvt
-                  | origRow == pawnRow = maybeNonCaptureMvt (vDiff . vDiff, id)
+                  | origRow == pawnRow = maybeNonCaptureMvt (id, vDiff . vDiff)
                   | otherwise = Nothing
               maybeNonCaptureMvt diff | destIsEmpty && (not outOfBounds) = Just dest
                                       | otherwise = Nothing
