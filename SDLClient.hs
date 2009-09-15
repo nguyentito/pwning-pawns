@@ -51,6 +51,7 @@ mainLoop = do
     unless moveChanIsEmpty $ do
       moveStr <- liftIO . readChan =<< asks moveChan
       modify (\st -> st { position = applyMove (parseMove moveStr) White (position st) })
+      selectSquare Nothing
     drawBoard
     drawLayer2
     drawPosition =<< gets position

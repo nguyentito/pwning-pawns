@@ -121,7 +121,7 @@ linearMovement :: [MoveSquareDiff] -> MoveFunction
 linearMovement mvts (Piece pieceType color) orig (Position board _) =
     map (makeStandardMove pieceType orig) . concatMap f $ mvts
         where f mvtDiff = takeWhile (canLandOn color board) .
-                          iterate (applyDiff mvtDiff) $
+                          tail . iterate (applyDiff mvtDiff) $
                           orig
 
 
