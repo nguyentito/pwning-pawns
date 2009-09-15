@@ -135,7 +135,7 @@ pawnMoves :: MoveFunction
 pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
     -- will add en passant later
     map (makeStandardMove pieceType orig) . catMaybes $
-    maybeDoubleAdvanceMvt : maybeAdvanceMvt : captureMvts
+    maybeDoubleAdvanceMvt : maybeAdvanceMvt : map Just captureMvts
         where vDiff = case color of White -> ((+) 1);
                                     Black -> flip (-) 1
               maybeAdvanceMvt = maybeNonCaptureMvt (vDiff, id)
@@ -154,6 +154,8 @@ pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
                                             Just (Piece _ occupyingPieceColor)
                                                 | occupyingPieceColor /= color -> True
                                             _ -> False
+              pawnRow = case color of White -> 2;
+                                      Black -> 7
                         
 
 applyDiff :: MoveSquareDiff -> Square -> Square
