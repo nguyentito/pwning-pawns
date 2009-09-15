@@ -60,16 +60,27 @@ mainLoop = do
 handleEvents :: [SDL.Event] -> AppMonad ()
 handleEvents = mapM_ f
     where f (SDL.MouseButtonUp x y SDL.ButtonLeft) = do
-            sq <- gets selectedSquare
-            let clickedCol = xToCol . fromIntegral $ x
-                clickedRow = yToRow . fromIntegral $ y
-                setSelectedSquare newSq = modify (\st -> st { selectedSquare = newSq })
-            case sq of
-              Just (col, row) | col == clickedCol && row == clickedRow ->
-                                  setSelectedSquare Nothing
-                              | otherwise -> return ()
-              Nothing -> setSelectedSquare $ Just (clickedCol, clickedRow)
+            onClickedSquare ((xToCol . fromIntegral $ x),
+                             (yToRow . fromIntegral $ y))
           f _ = return ()
+
+
+onClickedSquare square@(col, row) = do
+  selectedSquare <- gets selectedSquare
+  case selectedSquare of
+    Just (selectedCol, selectedRow)
+        | col == selectedCol && row == selectedRow -> selectSquare Nothing
+        | otherwise -> return ()
+    Nothing -> selectSquare $ Just square
+  
+selectSquare Nothing = modify (\st -> st { selectedSquare = Nothing,
+                                           currentMovesMap = Nothing })
+selectSquare maybeSquare@(Just square) = do
+  position@(Position board _) <- gets position
+  case M.lookup square board of
+    Nothing -> return ()
+    Just piece -> modify (\st -> st { selectedSquare = maybeSquare,
+                                      currentMovesMap = Just $ legalMovesMap piece square position })
 
 drawBoard = sequence_ [drawSquare x y | x <- [0..7], y <- [0..7]]
 drawSquare x y = do
@@ -86,7 +97,11 @@ drawSquare x y = do
 drawLayer2 = do
   sq <- gets selectedSquare
   case sq of
-    Just coords -> highlightSquare coords (0, 255, 0)
+    Just coords -> highlightSquare coords (0, 0, 255)
+    Nothing -> return ()
+  maybeMovesMap <- gets currentMovesMap
+  case maybeMovesMap of
+    Just movesMap -> mapM_ (flip highlightSquare (0, 255, 0)) (M.keys movesMap)
     Nothing -> return ()
 
 highlightSquare (col, row) (r, g, b) = do
