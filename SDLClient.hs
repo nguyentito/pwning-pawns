@@ -50,7 +50,7 @@ mainLoop = do
     moveChanIsEmpty <- liftIO . isEmptyChan =<< asks moveChan
     unless moveChanIsEmpty $ do
       moveStr <- liftIO . readChan =<< asks moveChan
-      modify (\st -> st { position = applyMove (parseMove moveStr) White (position st) })
+      modify (\st -> st { position = applyMove (parseMove moveStr) Black (position st) })
       selectSquare Nothing
     drawBoard
     drawLayer2
@@ -71,7 +71,13 @@ onClickedSquare square@(col, row) = do
   case selectedSquare of
     Just (selectedCol, selectedRow)
         | col == selectedCol && row == selectedRow -> selectSquare Nothing
-        | otherwise -> return ()
+        | otherwise -> do
+            (Just movesMap) <- gets currentMovesMap
+            case M.lookup square movesMap of
+              Just move -> do
+                modify (\st -> st { position = applyMove move White (position st) })
+                selectSquare Nothing
+              Nothing -> return ()
     Nothing -> selectSquare $ Just square
   
 selectSquare Nothing = modify (\st -> st { selectedSquare = Nothing,
