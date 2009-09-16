@@ -149,7 +149,7 @@ pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
                         outOfBounds = destCol < 1 || destCol > 8 ||
                                       destRow < 1 || destRow > 8
               captureMvts = filter hasEnemy . map (flip applyDiff orig) $
-                            ((,) vDiff) <$> pm1
+                            (flip (,) vDiff) <$> pm1
                   where hasEnemy square = case M.lookup square board of
                                             Just (Piece _ occupyingPieceColor)
                                                 | occupyingPieceColor /= color -> True
