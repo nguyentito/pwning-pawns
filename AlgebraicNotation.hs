@@ -38,6 +38,6 @@ printMove (Castling Queenside) = "0-0-0"
 printMove (StandardMove pieceType (origCol, origRow) (destCol, destRow)) =
     maybe id (:) (lookup pieceType pieceLetterAssocList) $
     [ colToChar origCol, rowToChar origRow, '-',
-      colToChar destCol, rowToChar destCol ]
+      colToChar destCol, rowToChar destRow ]
         where colToChar = chr . (+ (ord 'a')) . (flip (-) 1)
               rowToChar = intToDigit
