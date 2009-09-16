@@ -1,4 +1,6 @@
 import Control.Applicative
+import Control.Monad
+import Data.List
 import System.Exit
 import System.IO
 import Network
@@ -18,7 +20,7 @@ main = withSocketsDo $ do
 acceptClient socket response = do
   (newClientHandle, _, _) <- accept socket
   hSetBuffering newClientHandle LineBuffering
-  msg <- hGetLine clientHandle
+  msg <- hGetLine newClientHandle
   if ("CONNECT" `isPrefixOf` msg)
     then do
       hPutStrLn newClientHandle $ "ACCEPT " ++ response

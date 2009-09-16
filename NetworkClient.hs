@@ -1,4 +1,6 @@
 import Control.Concurrent
+import Control.Monad
+import Data.List
 import System.IO
 import Network
 
@@ -9,7 +11,7 @@ import ChessTypes
 
 main :: IO ()
 main = withSocketsDo $ do
-  putStr "Server: " >> hFlush stdin
+  putStr "Server: " >> hFlush stdout
   hostname <- getLine
   handle <- connectTo hostname (PortNumber 28406)
   hSetBuffering handle LineBuffering
