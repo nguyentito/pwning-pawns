@@ -5,8 +5,8 @@ import SDLClient
 import ChessTypes
 
 main = do
-  whiteMovesChan <- newChan
-  blackMovesChan <- newChan
-  forkIO $ forever (writeChan blackMovesChan =<< getLine)
-  forkIO $ forever (putStrLn . ("White has moved: " ++) =<< readChan whiteMovesChan)
-  mainSDL whiteMovesChan blackMovesChan White
+  guiMovesChan <- newChan
+  cliMovesChan <- newChan
+  forkIO $ forever (writeChan cliMovesChan =<< getLine)
+  forkIO $ forever (putStrLn . ("You have played: " ++) =<< readChan guiMovesChan)
+  mainSDL guiMovesChan cliMovesChan Black
