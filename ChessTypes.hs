@@ -12,6 +12,9 @@ data PieceType = King | Queen | Rook | Bishop | Knight | Pawn
 data Color = Black | White
            deriving (Eq, Show, Ord)
 
+otherColor White = Black
+otherColor Black = White
+
 data Position = Position Board GameState
 type Board = Map Square Piece
 data GameState = GameState {

@@ -23,38 +23,46 @@ boardSidePx = squareSidePx * 8
 data AppData = AppData {
       screen :: SDL.Surface,
       piecesImagesMap :: Map Piece SDL.Surface,
-      moveChan :: Chan String
+      playerMovesChan :: Chan String,
+      opponentMovesChan :: Chan String,
+      playerColor :: Color
     }
 
 data AppState = AppState {
       position :: Position,
       selectedSquare :: Maybe Square,
-      currentMovesMap :: Maybe (Map Square Move)
+      currentMovesMap :: Maybe (Map Square Move),
+      sideToPlay :: Color
     }
 
-mainSDL :: Chan String -> IO ()
-mainSDL moveChan = SDL.withInit [SDL.InitVideo] $ do
-  screen <- SDL.setVideoMode boardSidePx boardSidePx 0 [SDL.HWSurface, SDL.DoubleBuf]
-  piecesImagesMap <- loadPiecesImages
-  evalStateT (runReaderT mainLoop
-              (AppData screen piecesImagesMap moveChan))
-             (AppState startingPosition Nothing Nothing)
-  
+mainSDL :: Chan String -> Chan String -> Color -> IO ()
+mainSDL playerMovesChan opponentMovesChan playerColor = do
+  SDL.withInit [SDL.InitVideo] $ do
+    screen <- SDL.setVideoMode boardSidePx boardSidePx 0 [SDL.HWSurface, SDL.DoubleBuf]
+    piecesImagesMap <- loadPiecesImages
+    let initData = AppData screen piecesImagesMap
+                           playerMovesChan opponentMovesChan
+                           playerColor
+        initState = AppState startingPosition Nothing Nothing White
+    runAppMonad mainLoop initData initState
+
+
 type AppMonad a = ReaderT AppData (StateT AppState IO) a
+               
+runAppMonad :: AppMonad a -> AppData -> AppState -> IO a
+runAppMonad appMonad initData initState =
+    evalStateT (runReaderT appMonad initData) initState
+
 
 mainLoop :: AppMonad ()
 mainLoop = do
   events <- liftIO pollEvents
   unless (SDL.Quit `elem` events) $ do
     handleEvents events
-    moveChanIsEmpty <- liftIO . isEmptyChan =<< asks moveChan
-    unless moveChanIsEmpty $ do
-      moveStr <- liftIO . readChan =<< asks moveChan
-      modify (\st -> st { position = applyMove (parseMove moveStr) Black (position st) })
-      selectSquare Nothing
+    handleOpponentMoves
     drawBoard
     drawLayer2
-    drawPosition =<< gets position
+    drawPosition
     (liftIO . SDL.flip) =<< asks screen
     mainLoop
 
@@ -75,7 +83,7 @@ onClickedSquare square@(col, row) = do
             (Just movesMap) <- gets currentMovesMap
             case M.lookup square movesMap of
               Just move -> do
-                modify (\st -> st { position = applyMove move White (position st) })
+                applyPlayerMove move
                 selectSquare Nothing
               Nothing -> return ()
     Nothing -> selectSquare $ Just square
@@ -88,6 +96,26 @@ selectSquare maybeSquare@(Just square) = do
     Nothing -> return ()
     Just piece -> modify (\st -> st { selectedSquare = maybeSquare,
                                       currentMovesMap = Just $ legalMovesMap piece square position })
+
+applyPlayerMove move = do 
+  color <- asks playerColor
+  modify (\st -> st { position = applyMove move color (position st),
+                      sideToPlay = otherColor color })
+  chan <- asks playerMovesChan
+  liftIO $ writeChan chan (printMove move)
+
+
+handleOpponentMoves = do
+  playerColor <- asks playerColor
+  sideToPlay <- gets sideToPlay
+  when (sideToPlay /= playerColor) $ do
+    opponentMovesChan <- asks opponentMovesChan
+    opponentHasPlayed <- liftIO $ not <$> (isEmptyChan opponentMovesChan)
+    when opponentHasPlayed $ do
+      opponentMove <- liftIO $ parseMove <$> (readChan opponentMovesChan)
+      modify (\st -> st { position = applyMove opponentMove sideToPlay (position st),
+                          sideToPlay = playerColor })
+
 
 drawBoard = sequence_ [drawSquare x y | x <- [0..7], y <- [0..7]]
 drawSquare x y = do
@@ -123,7 +151,7 @@ highlightSquare (col, row) (r, g, b) = do
       where (x, y) = (colToX col, rowToY row)
 
 
-drawPosition (Position piecesMap _) = drawPieces piecesMap
+drawPosition = (\(Position piecesMap _) -> drawPieces piecesMap) =<< gets position
 drawPieces = F.sequence_ . M.mapWithKey drawPiece
 drawPiece (col, row) piece = do
   img <- (M.! piece) <$> asks piecesImagesMap
