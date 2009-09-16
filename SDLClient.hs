@@ -75,18 +75,21 @@ handleEvents = mapM_ f
 
 
 onClickedSquare square@(col, row) = do
-  selectedSquare <- gets selectedSquare
-  case selectedSquare of
-    Just (selectedCol, selectedRow)
-        | col == selectedCol && row == selectedRow -> selectSquare Nothing
-        | otherwise -> do
-            (Just movesMap) <- gets currentMovesMap
-            case M.lookup square movesMap of
-              Just move -> do
-                applyPlayerMove move
-                selectSquare Nothing
-              Nothing -> return ()
-    Nothing -> selectSquare $ Just square
+  playerColor <- asks playerColor
+  sideToPlay <- gets sideToPlay
+  when (sideToPlay == playerColor) $ do
+    selectedSquare <- gets selectedSquare
+    case selectedSquare of
+      Just (selectedCol, selectedRow)
+          | col == selectedCol && row == selectedRow -> selectSquare Nothing
+          | otherwise -> do
+              (Just movesMap) <- gets currentMovesMap
+              case M.lookup square movesMap of
+                Just move -> do
+                  applyPlayerMove move
+                  selectSquare Nothing
+                Nothing -> return ()
+      Nothing -> selectSquare $ Just square
   
 selectSquare Nothing = modify (\st -> st { selectedSquare = Nothing,
                                            currentMovesMap = Nothing })

@@ -115,14 +115,26 @@ simpleMovement mvts (Piece pieceType color) orig (Position board _) =
     map (makeStandardMove pieceType orig) .
     filter (canLandOn color board) .
     map diffToDest $ mvts
-        where diffToDest = flip applyDiff orig
+        where diffToDest = flip applyDiff orig                           
     
 linearMovement :: [MoveSquareDiff] -> MoveFunction
 linearMovement mvts (Piece pieceType color) orig (Position board _) =
     map (makeStandardMove pieceType orig) . concatMap f $ mvts
-        where f mvtDiff = takeWhile (canLandOn color board) .
+        where f mvtDiff = takeUntilObstacle color board .
                           tail . iterate (applyDiff mvtDiff) $
                           orig
+
+canLandOn movingPieceColor board square@(row, col)
+    | row < 1 || row > 8 || col < 1 || col > 8 = False
+    | otherwise = case M.lookup square board of
+                    Just (Piece _ occupyingPieceColor)
+                        | occupyingPieceColor == movingPieceColor -> False
+                    _ -> True
+
+takeUntilObstacle movingPieceColor board (square:otherSquares)
+    | not $ canLandOn movingPieceColor board square = []
+    | M.member square board = [square]
+    | otherwise = square : takeUntilObstacle movingPieceColor board otherSquares
 
 
 castlingPossibilities :: MoveFunction
@@ -164,12 +176,6 @@ applyDiff (vDiff, hDiff) (origCol, origRow) = (vDiff origCol, hDiff origRow)
 concatMoves :: MoveFunction -> MoveFunction -> MoveFunction
 concatMoves f g = \a b c -> f a b c ++ g a b c
 
-canLandOn movingPieceColor board square@(row, col)
-    | row < 1 || row > 8 || col < 1 || col > 8 = False
-    | otherwise = case M.lookup square board of
-                    Just (Piece _ occupyingPieceColor)
-                        | occupyingPieceColor == movingPieceColor -> False
-                    _ -> True
 
 --
 -- Castling rules section
