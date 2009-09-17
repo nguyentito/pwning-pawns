@@ -138,10 +138,12 @@ takeUntilObstacle movingPieceColor board (square:otherSquares)
 
 
 castlingPossibilities :: MoveFunction
-castlingPossibilities (Piece _ color) _ (Position _ state) =
+castlingPossibilities (Piece _ color) _ (Position board state) =
     map Castling . filter castlingPossible $ [Kingside, Queenside]
-        where castlingPossible side = M.lookup (color, side) (castlingMap state)
-                                      == Just True
+        where castlingPossible side =
+                  (M.lookup (color, side) (castlingMap state) == Just True)
+                  && all (`M.notMember` board) [(col, castlingRow color)
+                                                | col <- castlingColsInBetween side]
 
 pawnMoves :: MoveFunction
 pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
@@ -194,3 +196,6 @@ castlingKingDestCol Queenside = 3
 
 castlingRookDestCol Kingside = 6
 castlingRookDestCol Queenside = 4
+
+castlingColsInBetween Kingside = [6, 7]
+castlingColsInBetween Queenside = [2, 3, 4]
