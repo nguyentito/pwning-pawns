@@ -95,10 +95,13 @@ selectSquare Nothing = modify (\st -> st { selectedSquare = Nothing,
                                            currentMovesMap = Nothing })
 selectSquare maybeSquare@(Just square) = do
   position@(Position board _) <- gets position
+  playerColor <- asks playerColor
   case M.lookup square board of
-    Nothing -> return ()
-    Just piece -> modify (\st -> st { selectedSquare = maybeSquare,
-                                      currentMovesMap = Just $ legalMovesMap piece square position })
+    Just piece@(Piece _ color)
+        | color == playerColor ->
+            modify (\st -> st { selectedSquare = maybeSquare,
+                                currentMovesMap = Just $ legalMovesMap piece square position })
+    _ -> return ()
 
 applyPlayerMove move = do 
   color <- asks playerColor
