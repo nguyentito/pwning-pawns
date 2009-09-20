@@ -82,25 +82,34 @@ associatedSquare color (StandardMove {moveDest=dest}) = dest
 associatedSquare color (Castling side) = (castlingKingDestCol side, castlingRow color)
 
 
-legalMoves :: Piece -> Square -> Position -> [Move] -- not a MoveFunction
-legalMoves piece@(Piece pieceType _) = legalMoves' pieceType piece
+legalMoves :: Piece -> Square -> Position -> [Move]
+legalMoves piece@(Piece _ color) square position = filter (not . leavesKingInCheck) moves
+    where moves = legalMoves' piece square position
+          leavesKingInCheck move = sideIsInCheck color (applyMove move color position)
 
-type MoveFunction = Piece -> Square -> Position -> [Move]
+sideIsInCheck :: Color -> Position -> Bool
+sideIsInCheck color position@(Position board _) = any threatensKing opponentMoves
+    where opponentMoves = concatMap (\(square, piece) -> legalMoves' piece square position) .
+                          filter ((/= color) . pieceColor . snd) $ M.toList board
+          pieceColor (Piece _ c) = c
+          threatensKing (StandardMove { moveDest = dest }) =
+              (Just dest) == maybeKingSquare
+          threatensKing _ = False
+          maybeKingSquare = (fst <$>) . find (((Piece King color) ==) . snd) $ M.toList board
 
-legalMoves' :: PieceType -> MoveFunction
+-- This version doesn't check if your king is in check after a move
+-- (in this case, the move should be illegal)
+legalMoves' :: Piece -> Square -> Position -> [Move]
+legalMoves' piece@(Piece pieceType _) = f pieceType piece
+    where f Pawn = pawnMoves
+          f King = simpleMovement omniDir `concatMoves` castlingPossibilities
+          f Knight = simpleMovement $ [(,), flip (,)] <*> pm1 <*> pm2
+              where pm2 = [(+) 2, flip (-) 2]
+          f Queen = linearMovement omniDir
+          f Rook = linearMovement orthogonalDir
+          f Bishop = linearMovement diagonalDir
 
-legalMoves' Pawn = pawnMoves
-    
-legalMoves' King = simpleMovement omniDir `concatMoves` castlingPossibilities
-
-legalMoves' Knight  = simpleMovement $ [(,), flip (,)] <*> pm1 <*> pm2
-    where pm2 = [(+) 2, flip (-) 2]
-
-legalMoves' Queen = linearMovement omniDir
-legalMoves' Rook = linearMovement orthogonalDir
-legalMoves' Bishop = linearMovement diagonalDir
-
-
+      
 type MoveSquareDiff = (Int -> Int, Int -> Int)
 
 orthogonalDir, diagonalDir, omniDir :: [MoveSquareDiff]
@@ -109,6 +118,8 @@ diagonalDir = (,) <$> pm1 <*> pm1
 omniDir = orthogonalDir ++ diagonalDir
 pm1 = [(+) 1, flip (-) 1]
 
+
+type MoveFunction = Piece -> Square -> Position -> [Move]
 
 simpleMovement :: [MoveSquareDiff] -> MoveFunction
 simpleMovement mvts (Piece pieceType color) orig (Position board _) =
