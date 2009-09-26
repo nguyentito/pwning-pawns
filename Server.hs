@@ -7,78 +7,65 @@ import System.Exit
 import System.IO
 import Network
 
-------------------------------------------------------
+import Util
+
 
 data AppData = AppData {
       clientsMVar :: MVar [Handle],
       gamesMVar :: MVar [String]
     }
 
-type AppMonad a = ReaderT AppData IO a
-
-forkAppMonad :: AppMonad () -> AppMonad ThreadId
-forkAppMonad act = liftIO . forkIO . runReaderT act =<< ask
-
-------------------------------------------------------
-
 
 main :: IO ()
 main = withSocketsDo $ do
   mvar1 <- newMVar []
-  mvar2 <- newMVar ["teletubbies", "tinky winky", "dipsy", "lala", "po"]
+  mvar2 <- newMVar []
   socket <- listenOn (PortNumber 28406)
-  runReaderT (acceptClients socket) (AppData { clientsMVar = mvar1, gamesMVar = mvar2 })
+  acceptClients socket (AppData { clientsMVar = mvar1, gamesMVar = mvar2 })
 
-acceptClients :: Socket -> AppMonad ()
-acceptClients socket = forever $ do
-  (newClientHandle, _, _) <- liftIO $ accept socket
-  liftIO $ hSetBuffering newClientHandle LineBuffering
-  acceptClient newClientHandle
+acceptClients :: Socket -> AppData -> IO ()
+acceptClients socket appData = forever $ do
+  (newClientHandle, _, _) <- accept socket
+  hSetBuffering newClientHandle LineBuffering
+  acceptClient newClientHandle appData
 
-acceptClient :: Handle -> AppMonad ()
-acceptClient newClientHandle = do
-  msg <- liftIO $ hGetLine newClientHandle
+acceptClient :: Handle -> AppData -> IO ()
+acceptClient newClientHandle appData = do
+  msg <- hGetLine newClientHandle
   case words msg of
     ("CONNECT":_) -> do
-      addClient newClientHandle
-      liftIO $ hPutStrLn newClientHandle "CONNECTOK"
-      sendGamesList newClientHandle
+      addClient newClientHandle appData
+      hPutStrLn newClientHandle "CONNECTOK"
+      sendGamesList newClientHandle appData
     _ -> do
-      liftIO $ hClose newClientHandle
+      hClose newClientHandle
 
-addClient :: Handle -> AppMonad ()
-addClient newClientHandle = do
-  cmv <- asks clientsMVar
-  liftIO . modifyMVar_ cmv $ \clients ->
+addClient :: Handle -> AppData -> IO ()
+addClient newClientHandle appData = do
+  modifyMVar_ (clientsMVar appData) $ \clients ->
       return (newClientHandle:clients)
-  forkAppMonad $ recvMsgLoop newClientHandle
+  forkIO $ processMessagesFromClient newClientHandle appData
   return ()
 
-recvMsgLoop :: Handle -> AppMonad ()
-recvMsgLoop clientHandle = do
-  mapM_ (processMsg clientHandle) . lines =<< (liftIO $ hGetContents clientHandle)
-  deleteClient clientHandle
-
-deleteClient :: Handle -> AppMonad ()
-deleteClient clientHandle = do
-  cmv <- asks clientsMVar
-  liftIO . modifyMVar_ cmv $ \clients ->
+deleteClient :: Handle -> AppData -> IO ()
+deleteClient clientHandle appData = do
+  modifyMVar_ (clientsMVar appData) $ \clients ->
       return (delete clientHandle clients)
-  liftIO $ hClose clientHandle
+  hClose clientHandle
 
-processMsg :: Handle -> String -> AppMonad ()
-processMsg senderHandle msg =
-    case words msg of
-      _ -> return ()
---      ["CREATEGAME", gameName] -> createGame gameName senderHandle
---      _ -> undefined
+processMessagesFromClient :: Handle -> AppData -> IO ()
+processMessagesFromClient clientHandle appData =
+    processLinesFromHandle clientHandle dispatchAList
+        where dispatchAList = [ ("CREATEGAME", createGame clientHandle appData) ]
 
-createGame :: String -> Handle -> AppMonad ()
-createGame = undefined
+createGame :: Handle -> AppData -> String ->  IO ()
+createGame _ appData gameName = do
+  modifyMVar_ (gamesMVar appData) $ \gamesList ->
+      return (gameName:gamesList)
+  withMVar (clientsMVar appData) $ mapM_ (flip sendGamesList appData)
 
-sendGamesList :: Handle -> AppMonad ()
-sendGamesList handle = do
-  gmv <- asks gamesMVar
-  liftIO . withMVar gmv $ \gamesList ->
-      hPutStrLn handle $ "GAMESLIST " ++ intercalate "\t" gamesList ++ "\n"
+sendGamesList :: Handle -> AppData -> IO ()
+sendGamesList handle appData = do
+  withMVar (gamesMVar appData) $ \gamesList ->
+      hPutStrLn handle $ "GAMESLIST " ++ intercalate "\t" gamesList
 

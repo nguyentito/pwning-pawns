@@ -1,6 +1,7 @@
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
+import Data.IORef
 import Data.List
 import Data.Maybe
 import System.IO
@@ -11,11 +12,13 @@ import Graphics.UI.WX
 import SDLClient
 import Common
 import ChessTypes
+import Util
 
 
 main :: IO ()
 main = withSocketsDo . start $ do
 
+  maybeHandleRef <- newIORef Nothing
   gamesMVar <- newMVar []
 
   f <- frame [ text := "Pwning Pawns" ]
@@ -29,26 +32,37 @@ main = withSocketsDo . start $ do
                                 fill $ widget gamesListBox,
                                 hfill . row 0 $ map (fill . widget) [ createGameBtn, joinGameBtn, quitBtn ] ] ]
 
+  set quitBtn [ on command := close f ]
+
   let connectBtnProps = [ text := "Connect", on command := onConnectCommand ]
       onConnectCommand = do
-        ip <- textDialog f "Server address :" "Connect to server" ""
+        ip <- textDialog f "Server address:" "Connect to server" ""
         maybeHandle <- connectToServer ip
         case maybeHandle of
           Nothing -> return ()
           Just handle -> do
-            forkIO $ handleMessagesWithHeader "GAMESLIST" handle (refreshGamesList gamesMVar)
+            forkIO $ processIncomingMessages handle gamesMVar
+            writeIORef maybeHandleRef (Just handle)
             set connectionInfo [ text := "Connected to server " ++ ip ++ "."]
             set connectBtn disconnectBtnProps
 
       disconnectBtnProps = [ text := "Disconnect", on command := onDisconnectCommand ]
       onDisconnectCommand = do
+        maybe (return ()) hClose =<< readIORef maybeHandleRef
+        writeIORef maybeHandleRef Nothing
         set connectionInfo [ text := "You are not connected" ]
         set connectBtn connectBtnProps 
 
   set connectBtn connectBtnProps
 
-  set quitBtn [ on command := close f ]
-  set createGameBtn [ on command := return () ]
+  set createGameBtn [ on command := do
+                        maybeHandle <- readIORef maybeHandleRef
+                        case maybeHandle of
+                          Nothing -> return ()
+                          Just handle -> do
+                            gameName <- textDialog f "Name of the game:" "Create game" ""
+                            createGame gameName handle ]
+
   set joinGameBtn [ on command := return () ]
   
   let periodicRefresh = do
@@ -68,27 +82,20 @@ connectToServer serverAddress = do
     response <- hGetLine handle
     unlessMaybe (response /= "CONNECTOK") $ do
       return $ Just handle
+
   
-unlessMaybe :: (Monad m) => Bool -> m (Maybe a) -> m (Maybe a)
-unlessMaybe True  _   = return Nothing
-unlessMaybe False act = act
-
-
-messageStream :: Handle -> IO [String]
-messageStream handle = lines <$> hGetContents handle
-
-handleMessagesWithHeader :: String -> Handle -> (String -> IO ()) -> IO ()
-handleMessagesWithHeader header handle act =
-    mapM_ act . mapMaybe (stripPrefix (header ++ " ")) =<< messageStream handle 
-
+processIncomingMessages :: Handle -> MVar [String] -> IO ()
+processIncomingMessages handle gamesMVar =
+    processLinesFromHandle handle dispatchAList
+        where dispatchAList = [ ("GAMESLIST", refreshGamesList gamesMVar) ]
 
 refreshGamesList :: MVar [String] -> String -> IO ()
 refreshGamesList gamesMVar str = do
   modifyMVar_ gamesMVar $ const (return $ split '\t' str)
-    where split _     [] = []
-          split delim cs = case span (/= delim) cs of
-                             (prefix, []) -> [prefix]
-                             (prefix, (_:rest)) -> prefix : split delim rest
+
+
+createGame :: String -> Handle -> IO ()
+createGame gameName handle = hPutStrLn handle $ "CREATEGAME " ++ gameName ++ "\n"
 
 
 {-
