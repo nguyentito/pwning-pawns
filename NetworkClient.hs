@@ -60,14 +60,15 @@ main = withSocketsDo . start $ do
                         case maybeHandle of
                           Nothing -> return ()
                           Just handle -> do
-                            gameName <- textDialog f "Name of the game:" "Create game" ""
-                            createGame gameName handle ]
+                            createGameDialog f handle ]
 
   set joinGameBtn [ on command := return () ]
   
   let periodicRefresh = do
         withMVar gamesMVar $ \gamesList ->
-            set gamesListBox [ items := gamesList ]
+            currentGamesList <- get gamesListBox items
+            when (currentGamesList /= gamesList) $ 
+              set gamesListBox [ items := gamesList ]
         yield
   timer f [ interval := 25, on command := periodicRefresh ]
 
@@ -87,16 +88,46 @@ connectToServer serverAddress = do
 processIncomingMessages :: Handle -> MVar [String] -> IO ()
 processIncomingMessages handle gamesMVar =
     processLinesFromHandle handle dispatchAList
-        where dispatchAList = [ ("GAMESLIST", refreshGamesList gamesMVar) ]
+        where dispatchAList = [ ("GAMESLIST", refreshGamesList gamesMVar),
+                                ("CREATEGAMEOK", waitForOpponent) ]
+
 
 refreshGamesList :: MVar [String] -> String -> IO ()
 refreshGamesList gamesMVar str = do
   modifyMVar_ gamesMVar $ const (return $ split '\t' str)
 
 
-createGame :: String -> Handle -> IO ()
-createGame gameName handle = hPutStrLn handle $ "CREATEGAME " ++ gameName ++ "\n"
+createGameDialog :: Frame a -> Handle -> IO ()
+createGameDialog parentFrame handle = do
+  d <- dialog parentFrame [ text := "Create Game" ]
 
+  gameNameEntry <- textEntry d []
+  colorChoice <- choice d [ items := ["White", "Black"] ]
+  okBtn <- button d [ text := "OK" ]
+  cancelBtn <- button d [ text := "Cancel" ]
+
+  set d [ layout := grid 0 0 [ [ label "Name of the game:", hfill $ widget gameNameEntry ],
+                               [ label "Your color:", hfill $ widget colorChoice ],
+                               [ hfill hglue, widget okBtn, widget cancelBtn ] ] ]
+
+  result <- showModal d (\stop -> do 
+                           set okBtn [ on command := do
+                                         gameName <- get gameNameEntry text
+                                         colorNum <- get colorChoice selection
+                                         stop $ Just (gameName, colorNum) ]
+                           set cancelBtn [ on command := stop Nothing ] )
+  
+  case result of
+    Nothing -> return ()
+    Just (gameName, colorNum) -> createGame gameName (["White", "Black"] !! colorNum)
+
+
+createGame :: Handle -> String -> String -> IO ()
+createGame gameName color handle = 
+    hPutStrLn handle $ "CREATEGAME " ++ color ++ " " ++ gameName
+
+waitForOpponent :: String -> IO ()
+waitForOpponent str = return ()
 
 {-
 main :: IO ()
