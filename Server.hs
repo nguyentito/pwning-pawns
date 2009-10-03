@@ -94,16 +94,17 @@ createGame :: Handle -> AppData -> String -> IO ()
 createGame handle appData str = do
   let (Just (color, gameName)) = ( ((,) White) <$> stripPrefix "White " str )
                              <|> ( ((,) Black) <$> stripPrefix "Black " str )
-  createGame' handle color gameName appData
+  gameID <- createGame' handle color gameName appData
+  hPutStrLn handle $ "CREATEGAMEOK " ++ show gameID
   sendGamesList appData
 
 createGame' :: Handle -> Color -> String -> AppData -> IO ()
 createGame' handle color gameName appData = do
-  modifyMVar_ (maxGameIDMVar appData) $ \maxGameID -> do
+  modifyMVar (maxGameIDMVar appData) $ \maxGameID -> do
     let newGameID = maxGameID + 1
     modifyMVar_ (waitingGamesMVar appData) $
       return . M.insert newGameID (WaitingGame handle color gameName)
-    return newGameID
+    return (newGameID, newGameID)
 
 sendGamesList :: AppData -> IO ()
 sendGamesList appData = do

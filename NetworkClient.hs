@@ -4,6 +4,8 @@ import Control.Monad
 import Data.IORef
 import Data.List
 import Data.Maybe
+import Data.Map (Map)
+import qualified Data.Map as M
 import System.IO
 import Network
 
@@ -20,6 +22,7 @@ main = withSocketsDo . start $ do
 
   maybeHandleRef <- newIORef Nothing
   gamesMVar <- newMVar []
+  gamesListUpdatedMVar <- newMVar False
 
   f <- frame [ text := "Pwning Pawns" ]
   connectionInfo <- staticText f [ text := "You are not connected." ]
@@ -41,7 +44,7 @@ main = withSocketsDo . start $ do
         case maybeHandle of
           Nothing -> return ()
           Just handle -> do
-            forkIO $ processIncomingMessages handle gamesMVar
+            forkIO $ processIncomingMessages handle gamesMVar gamesListUpdatedMVar
             writeIORef maybeHandleRef (Just handle)
             set connectionInfo [ text := "Connected to server " ++ ip ++ "."]
             set connectBtn disconnectBtnProps
@@ -65,10 +68,11 @@ main = withSocketsDo . start $ do
   set joinGameBtn [ on command := return () ]
   
   let periodicRefresh = do
-        withMVar gamesMVar $ \gamesList ->
-            currentGamesList <- get gamesListBox items
-            when (currentGamesList /= gamesList) $ 
-              set gamesListBox [ items := gamesList ]
+        modifyMVar_ (gamesListUpdatedMVar) $ \gamesListUpdated -> do
+          when gamesListUpdated $ do
+            withMVar gamesMVar $ \gamesList -> do
+              set gamesListBox [ items := map snd gamesList ]
+          return False
         yield
   timer f [ interval := 25, on command := periodicRefresh ]
 
@@ -85,16 +89,22 @@ connectToServer serverAddress = do
       return $ Just handle
 
   
-processIncomingMessages :: Handle -> MVar [String] -> IO ()
-processIncomingMessages handle gamesMVar =
+processIncomingMessages :: Handle -> MVar [(Int, String)] -> MVar Bool -> IO ()
+processIncomingMessages handle gamesMVar gamesListUpdatedMVar=
     processLinesFromHandle handle dispatchAList
-        where dispatchAList = [ ("GAMESLIST", refreshGamesList gamesMVar),
-                                ("CREATEGAMEOK", waitForOpponent) ]
+        where dispatchAList = [ ("GAMESLIST", refreshGamesList gamesMVar gamesListUpdatedMVar),
+                                ("CREATEGAMEOK", const (return ())),
+                                ("STARTGAME", startGame)]
 
 
-refreshGamesList :: MVar [String] -> String -> IO ()
-refreshGamesList gamesMVar str = do
-  modifyMVar_ gamesMVar $ const (return $ split '\t' str)
+refreshGamesList :: MVar [(Int, String)] -> MVar Bool -> String -> IO ()
+refreshGamesList gamesMVar gamesListUpdatedMVar str = do
+  swapMVar gamesMVar newGamesList
+  swapMVar gamesListUpdatedMVar True
+  return ()
+      where newGamesList = map f . split '\t' $ str
+            f gameStr = let (gameIDStr:_) = words gameStr in
+                        (read gameIDStr, drop (length gameIDStr + 1) gameStr)
 
 
 createGameDialog :: Frame a -> Handle -> IO ()
@@ -119,51 +129,19 @@ createGameDialog parentFrame handle = do
   
   case result of
     Nothing -> return ()
-    Just (gameName, colorNum) -> createGame gameName (["White", "Black"] !! colorNum)
+    Just (gameName, colorNum) -> createGame gameName ([White, Black] !! colorNum)
 
 
-createGame :: Handle -> String -> String -> IO ()
+createGame :: Handle -> String -> Color -> IO ()
 createGame gameName color handle = 
-    hPutStrLn handle $ "CREATEGAME " ++ color ++ " " ++ gameName
+    hPutStrLn handle $ "CREATEGAME " ++ show color ++ " " ++ gameName
 
-waitForOpponent :: String -> IO ()
-waitForOpponent str = return ()
 
-{-
-main :: IO ()
-main = withSocketsDo $ do
-  putStr "Server: " >> hFlush stdout
-  hostname <- getLine
-  handle <- connectTo hostname (PortNumber 28406)
-  hSetBuffering handle LineBuffering
-  hPutStrLn handle "CONNECT foobar"
-  response <- hGetLine handle
-  let playerColor = case response of
-                      "ACCEPT W" -> White
-                      "ACCEPT B" -> Black
-                      _ -> error "Invalid response from server."
-  putStrLn "Waiting for the game to begin..."
-  startSignal <- hGetLine handle
-  unless (startSignal == "START") $ error "Invalid response from server."
-  startGame playerColor handle
+startGame :: String -> IO ()
+startGame str = do
+  undefined
+    where [gameIDStr, colorStr] = words str
+          gameID = read gameIDStr
+          color = read colorStr
 
-startGame :: Color -> Handle -> IO ()
-startGame playerColor handle = do
-  playerMovesChan <- newChan
-  opponentMovesChan <- newChan
-  forkIO $ sendMoves handle playerMovesChan
-  forkIO $ recieveMoves handle opponentMovesChan
-  mainSDL playerMovesChan opponentMovesChan playerColor
-
-sendMoves :: Handle -> Chan String -> IO ()
-sendMoves handle chan = forever $ do
-  moveStr <- readChan chan
-  hPutStrLn handle $ "MOVE " ++ moveStr
-  
-recieveMoves :: Handle -> Chan String -> IO ()
-recieveMoves handle chan = forever $ do
-  str <- hGetLine handle
-  when ("MOVE " `isPrefixOf` str) $ writeChan chan (drop 5 str)
-
--}
 
