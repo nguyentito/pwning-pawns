@@ -15,6 +15,10 @@ import Common
 import Util
 
 
+-- Type declarations --
+-----------------------
+
+-- A record that gets passed to most functions
 data AppData = AppData {
       clientsMVar :: MVar [Handle],
       waitingGamesMVar :: MVar (Map GameID WaitingGame),
@@ -24,18 +28,24 @@ data AppData = AppData {
 
 type GameID = Int
 
+-- Games created but not joined yet by a second player
 data WaitingGame = WaitingGame {
       creatorHandle :: Handle,
       creatorColor :: Color,
       waitingGameName :: String
     }
 
+-- Games currently playing
 data PlayingGame = PlayingGame {
       playingGameName :: String,
       playersHandles :: Map Color Handle
     }
-      
 
+
+-- The superstructure : the main action + managing connections from clients --
+------------------------------------------------------------------------------
+
+-- Main action : just init everything and start accepting clients
 main :: IO ()
 main = withSocketsDo $ do
   emptyListMVar <- newMVar []
@@ -51,12 +61,16 @@ main = withSocketsDo $ do
                          maxGameIDMVar = zeroMVar
                        }
 
+
+-- A loop which accepts connections on the socket and delegates the rest to acceptClient
 acceptClients :: Socket -> AppData -> IO ()
 acceptClients socket appData = forever $ do
   (newClientHandle, _, _) <- accept socket
   hSetBuffering newClientHandle LineBuffering
   acceptClient newClientHandle appData
 
+-- To accept the client, check the connection is working, then add the client
+-- This function may change to support usernames
 acceptClient :: Handle -> AppData -> IO ()
 acceptClient newClientHandle appData = do
   msg <- hGetLine newClientHandle
@@ -68,6 +82,8 @@ acceptClient newClientHandle appData = do
     _ -> do
       hClose newClientHandle
 
+-- 1. Add the client to the list of clients
+-- 2. Start processing messages from the client in another thread
 addClient :: Handle -> AppData -> IO ()
 addClient newClientHandle appData = do
   modifyMVar_ (clientsMVar appData) $ \clients ->
@@ -90,70 +106,78 @@ processMessagesFromClient clientHandle appData = do
                  ("JOINGAME"  , joinGame   clientHandle appData),
                  ("MOVE"      , handleMove clientHandle appData) ]
 
-createGame :: Handle -> AppData -> String -> IO ()
-createGame handle appData str = do
-  let (Just (color, gameName)) = ( ((,) White) <$> stripPrefix "White " str )
-                             <|> ( ((,) Black) <$> stripPrefix "Black " str )
-  gameID <- createGame' handle color gameName appData
-  hPutStrLn handle $ "CREATEGAMEOK " ++ show gameID
-  sendGamesList appData
+createGame = undefined
+joinGame = undefined
+handleMove = undefined
 
-createGame' :: Handle -> Color -> String -> AppData -> IO ()
-createGame' handle color gameName appData = do
-  modifyMVar (maxGameIDMVar appData) $ \maxGameID -> do
-    let newGameID = maxGameID + 1
-    modifyMVar_ (waitingGamesMVar appData) $
-      return . M.insert newGameID (WaitingGame handle color gameName)
-    return (newGameID, newGameID)
-
-sendGamesList :: AppData -> IO ()
-sendGamesList appData = do
-  withMVar (clientsMVar appData) $ mapM_ (flip sendGamesListTo appData)
+-- The actual request handling --
+---------------------------------
 
 sendGamesListTo :: Handle -> AppData -> IO ()
 sendGamesListTo handle appData = do
   withMVar (waitingGamesMVar appData) $ \gamesMap -> do
     let msg = intercalate "\t" strList
         strList = map gameToStr .
-                  filter ((clientHandle /=) . creatorHandle . snd) .
+                  filter ((handle /=) . creatorHandle . snd) .
                   M.toList $ gamesMap
         gameToStr (gameID, game) = show gameID ++ " " ++
                                    show (waitingGameName game)
-    hPutStrLn clientHandle $ "GAMESLIST " ++ msg
+    hPutStrLn handle $ "GAMESLIST " ++ msg
 
-joinGame :: Handle -> AppData -> String -> IO ()
-joinGame handle appData gameIDStr = do
-  let gameID = read gameIDStr
-  modifyMVar_ (waitingGamesMVar appData) $ \waitingGamesMap ->
-    case M.lookup gameID waitingGamesMap of
-      Nothing -> return waitingGamesMap
-      Just game -> M.delete gameID waitingGamesMap <$ do
-        modifyMVar_ (playingGamesMVar appData) $ \playingGamesMap -> do
-          let playingGame = PlayingGame {
-                              playingGameName = (waitingGameName game),
-                              playersHandles = handlesMap
-                            }
-              handlesMap = M.fromList [
-                             (creatorColor game, creatorHandle game),
-                             (otherColor . creatorColor $ game, handle)
-                           ]
-          sendStartGame gameID handlesMap
-          return (M.insert gameID playingGame playingGamesMap)
+sendGamesList :: AppData -> IO ()
+sendGamesList appData = do
+  withMVar (clientsMVar appData) $ mapM_ (flip sendGamesListTo appData)
 
-sendStartGame :: GameID -> Map Color Handle -> IO ()
-sendStartGame gameID = mapM_ f . M.toList
-    where f (color, handle) = hPutStrLn handle $
-                              "STARTGAME " ++ show gameID ++ " " ++ show color
+-- createGame :: Handle -> AppData -> String -> IO ()
+-- createGame handle appData str = do
+--   let (Just (color, gameName)) = ( ((,) White) <$> stripPrefix "White " str )
+--                              <|> ( ((,) Black) <$> stripPrefix "Black " str )
+--   gameID <- createGame' handle color gameName appData
+--   hPutStrLn handle $ "CREATEGAMEOK " ++ show gameID
+--   sendGamesList appData
 
-handleMove :: Handle -> AppData -> String -> IO ()
-handleMove senderHandle appData str = do
-  let [gameIDStr, moveStr] = words str
-      gameID = read str
-  withMVar (playingGamesMVar appData) $ \playingGamesMap -> do
-    case M.lookup gameID playingGamesMap of
-      Nothing -> return ()
-      Just game -> do
-        let (_, opponentHandle) = M.findMin . M.filter (/= senderHandle) $ game
-        hPutStrLn opponentHandle str
+-- createGame' :: Handle -> Color -> String -> AppData -> IO ()
+-- createGame' handle color gameName appData = do
+--   modifyMVar (maxGameIDMVar appData) $ \maxGameID -> do
+--     let newGameID = maxGameID + 1
+--     modifyMVar_ (waitingGamesMVar appData) $
+--       return . M.insert newGameID (WaitingGame handle color gameName)
+--     return (newGameID, newGameID)
+
+
+-- joinGame :: Handle -> AppData -> String -> IO ()
+-- joinGame handle appData gameIDStr = do
+--   let gameID = read gameIDStr
+--   modifyMVar_ (waitingGamesMVar appData) $ \waitingGamesMap ->
+--     case M.lookup gameID waitingGamesMap of
+--       Nothing -> return waitingGamesMap
+--       Just game -> M.delete gameID waitingGamesMap <$ do
+--         modifyMVar_ (playingGamesMVar appData) $ \playingGamesMap -> do
+--           let playingGame = PlayingGame {
+--                               playingGameName = (waitingGameName game),
+--                               playersHandles = handlesMap
+--                             }
+--               handlesMap = M.fromList [
+--                              (creatorColor game, creatorHandle game),
+--                              (otherColor . creatorColor $ game, handle)
+--                            ]
+--           sendStartGame gameID handlesMap
+--           return (M.insert gameID playingGame playingGamesMap)
+
+-- sendStartGame :: GameID -> Map Color Handle -> IO ()
+-- sendStartGame gameID = mapM_ f . M.toList
+--     where f (color, handle) = hPutStrLn handle $
+--                               "STARTGAME " ++ show gameID ++ " " ++ show color
+
+-- handleMove :: Handle -> AppData -> String -> IO ()
+-- handleMove senderHandle appData str = do
+--   let [gameIDStr, moveStr] = words str
+--       gameID = read str
+--   withMVar (playingGamesMVar appData) $ \playingGamesMap -> do
+--     case M.lookup gameID playingGamesMap of
+--       Nothing -> return ()
+--       Just game -> do
+--         let (_, opponentHandle) = M.findMin . M.filter (/= senderHandle) $ game
+--         hPutStrLn opponentHandle str
     
     

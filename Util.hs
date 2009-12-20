@@ -24,6 +24,6 @@ processLinesFromHandle handle dispatchAList = do
   mapM_ dispatchMessageByPrefix messageStream
     where dispatchMessageByPrefix msg =
               case catMaybes (map g dispatchAList) of
-                [] -> return ()
                 (act:_) -> act
+                [] -> return ()
               where g (header, fn) = fn <$> stripPrefix (header ++ " ") msg
