@@ -119,8 +119,7 @@ sendGamesListTo handle appData = do
         strList = map gameToStr .
                   filter ((handle /=) . creatorHandle . snd) .
                   M.toList $ gamesMap
-        gameToStr (gameID, game) = show gameID ++ " " ++
-                                   show (waitingGameName game)
+        gameToStr (gameID, game) = show gameID ++ " " ++ waitingGameName game
     hPutStrLn handle $ "GAMESLIST " ++ msg
 
 sendGamesList :: AppData -> IO ()
