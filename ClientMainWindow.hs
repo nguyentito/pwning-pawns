@@ -3,6 +3,7 @@ import Control.Arrow
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import Data.Maybe
 import Network
 import System.IO
 import System.IO.Error
@@ -26,24 +27,34 @@ data GUI = GUI {
       connectDialog :: Dialog,
       cdServerEntry :: Entry,
       cdBtnOk :: Button,
-      cdBtnCancel :: Button
+      cdBtnCancel :: Button,
+      createGameDialog :: Dialog,
+      cgdGameNameEntry :: Entry,
+      cgdColorComboBox :: ComboBox,
+      cgdBtnOk :: Button,
+      cgdBtnCancel :: Button
     }
 
 loadGUI :: IO GUI
 loadGUI = do
   Just xml <- xmlNew "client-main-window.glade"
   listBox <- flip LB.newListBox [] =<< xmlGetWidget xml castToTreeView "treeView"
-  GUI <$> xmlGetWidget xml castToWindow "mainWindow"
-      <*> xmlGetWidget xml castToButton "btnQuit"
-      <*> xmlGetWidget xml castToButton "btnConnect"
-      <*> xmlGetWidget xml castToButton "btnCreate"
-      <*> xmlGetWidget xml castToButton "btnJoin"
+  GUI <$> xmlGetWidget xml castToWindow   "mainWindow"
+      <*> xmlGetWidget xml castToButton   "btnQuit"
+      <*> xmlGetWidget xml castToButton   "btnConnect"
+      <*> xmlGetWidget xml castToButton   "btnCreate"
+      <*> xmlGetWidget xml castToButton   "btnJoin"
       <*> return listBox
-      <*> xmlGetWidget xml castToLabel "statusLabel"
-      <*> xmlGetWidget xml castToDialog "connectDialog"
-      <*> xmlGetWidget xml castToEntry  "cdServerEntry"
-      <*> xmlGetWidget xml castToButton "cdBtnOk"
-      <*> xmlGetWidget xml castToButton "cdBtnCancel"
+      <*> xmlGetWidget xml castToLabel    "statusLabel"
+      <*> xmlGetWidget xml castToDialog   "connectDialog"
+      <*> xmlGetWidget xml castToEntry    "cdServerEntry"
+      <*> xmlGetWidget xml castToButton   "cdBtnOk"
+      <*> xmlGetWidget xml castToButton   "cdBtnCancel"
+      <*> xmlGetWidget xml castToDialog   "createGameDialog"
+      <*> xmlGetWidget xml castToEntry    "cgdGameNameEntry"
+      <*> xmlGetWidget xml castToComboBox "cgdColorComboBox"
+      <*> xmlGetWidget xml castToButton   "cgdBtnOk"
+      <*> xmlGetWidget xml castToButton   "cgdBtnCancel"
 
 main :: IO ()
 main = withSocketsDo $ do
@@ -58,22 +69,27 @@ main = withSocketsDo $ do
     case maybeHandle of
       Nothing -> runConnectDialog gui connectionMVar
       Just handle -> disconnect handle gui >> swapMVar connectionMVar Nothing >> return ()
-  onClicked (btnCreate gui) $ createGame connectionMVar gui
+  onClicked (btnCreate gui) $ runCreateDialog connectionMVar gui
   --  onClicked (btnJoin gui) $ joinGame connectionMVar gui
   timeoutAddFull (True <$ yield) priorityDefaultIdle 100
   mainGUI
 
-runConnectDialog :: GUI -> MVar (Maybe Handle) -> IO ()
-runConnectDialog gui connectionMVar = do
-  let ok = dialogResponse (connectDialog gui) ResponseOk
-      cancel = dialogResponse (connectDialog gui) ResponseCancel
+runOkCancelDialog :: Dialog -> Button -> Button -> IO () -> IO ()
+runOkCancelDialog dialog okBtn cancelBtn act = do
   -- All the established signal connections are registered and disconnected at the end,
   -- to prevent a signal being connected twice after runConnectDialog runs twice.
-  id1 <- onEntryActivate (cdServerEntry gui) ok
-  id2 <- onClicked (cdBtnOk gui) ok
-  id3 <- onClicked (cdBtnCancel gui) cancel
-  response <- dialogRun (connectDialog gui)
-  when (response == ResponseOk) $ do
+  idOk <- onClicked okBtn $ dialogResponse dialog ResponseOk
+  idCancel <- onClicked cancelBtn $ dialogResponse dialog ResponseCancel
+  response <- dialogRun dialog
+  when (response == ResponseOk) act
+  signalDisconnect idOk
+  signalDisconnect idCancel
+  widgetHide dialog
+
+runConnectDialog :: GUI -> MVar (Maybe Handle) -> IO ()
+runConnectDialog gui connectionMVar = do
+  id <- onEntryActivate (cdServerEntry gui) $ dialogResponse (connectDialog gui) ResponseOk
+  runOkCancelDialog (connectDialog gui) (cdBtnOk gui) (cdBtnCancel gui) $ do
     success <- connect gui connectionMVar
     unless success $ do
       serverAddress <- get (cdServerEntry gui) entryText
@@ -81,10 +97,6 @@ runConnectDialog gui connectionMVar = do
                               MessageError ButtonsClose
                               ("Erreur : impossible de se connecter à " ++ serverAddress ++ ".")
       dialogRun msg >> widgetDestroy msg >> return ()
-  signalDisconnect id1
-  signalDisconnect id2
-  signalDisconnect id3
-  widgetHide (connectDialog gui)
 
 connect :: GUI -> MVar (Maybe Handle) -> IO Bool
 connect gui connectionMVar = do
@@ -121,22 +133,33 @@ disconnect connectionHandle gui = do
 
 withConnectionHandle :: MVar (Maybe Handle) -> (Handle -> IO ()) -> IO ()
 withConnectionHandle connectionMVar act = 
-  withMVar connectionMVar $ \maybeHandle ->
-    case maybeHandle of
-      Nothing -> return ()
-      Just handle -> act handle
+    withMVar connectionMVar $ maybe (return ()) act
 
 processMessagesFromServer :: Handle -> GUI -> IO ()
 processMessagesFromServer serverHandle gui = do
   processLinesFromHandle serverHandle dispatchAList
-      where dispatchAList = [("GAMESLIST", updateGamesList gui)]
+      where dispatchAList = [("GAMESLIST", updateGamesList gui),
+                             ("CREATEGAMEOK", waitForGame gui)]
 
-createGame :: MVar (Maybe Handle) -> GUI -> IO ()
-createGame connectionMVar gui = do
-  withConnectionHandle connectionMVar $ \handle -> do
-    hPutStrLn handle "CREATEGAME White foobar"
+runCreateDialog :: MVar (Maybe Handle) -> GUI -> IO ()
+runCreateDialog connectionMVar gui = do
+  set (cgdColorComboBox gui) [ comboBoxActive := 0 ]
+  runOkCancelDialog (createGameDialog gui) (cgdBtnOk gui) (cgdBtnCancel gui) $ do
+    gameName <- get (cgdGameNameEntry gui) entryText
+    colorStr <- (["White", "Black"] !!) <$> get (cgdColorComboBox gui) comboBoxActive
+    withConnectionHandle connectionMVar $ \handle -> do
+      hPutStrLn handle $ "CREATEGAME " ++ colorStr ++ " " ++ gameName
 
 updateGamesList :: GUI -> String -> IO ()
 updateGamesList gui str = LB.setList (gamesListBox gui) (parse str)
     where parse = map (first read . second tail . span (/=' ')) . split '\t'
 
+waitForGame :: GUI -> String -> IO ()
+waitForGame gui str = do
+  msg <- messageDialogNew (Just (mainWindow gui)) []
+                          MessageInfo ButtonsClose
+                          text
+  dialogRun msg
+  return ()
+      where gameID = (read str) :: Int
+            text = "En attente du démarrage de la partie no." ++ show gameID ++ "..."
