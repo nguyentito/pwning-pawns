@@ -106,7 +106,6 @@ processMessagesFromClient clientHandle appData = do
                  ("JOINGAME"  , joinGame   clientHandle appData),
                  ("MOVE"      , handleMove clientHandle appData) ]
 
-createGame = undefined
 joinGame = undefined
 handleMove = undefined
 
@@ -128,21 +127,21 @@ sendGamesList :: AppData -> IO ()
 sendGamesList appData = do
   withMVar (clientsMVar appData) $ mapM_ (flip sendGamesListTo appData)
 
--- createGame :: Handle -> AppData -> String -> IO ()
--- createGame handle appData str = do
---   let (Just (color, gameName)) = ( ((,) White) <$> stripPrefix "White " str )
---                              <|> ( ((,) Black) <$> stripPrefix "Black " str )
---   gameID <- createGame' handle color gameName appData
---   hPutStrLn handle $ "CREATEGAMEOK " ++ show gameID
---   sendGamesList appData
+createGame :: Handle -> AppData -> String -> IO ()
+createGame handle appData str = do
+  let (Just (color, gameName)) = ( ((,) White) <$> stripPrefix "White " str )
+                             <|> ( ((,) Black) <$> stripPrefix "Black " str )
+  gameID <- createGame' handle color gameName appData
+  hPutStrLn handle $ "CREATEGAMEOK " ++ show gameID
+  sendGamesList appData
 
--- createGame' :: Handle -> Color -> String -> AppData -> IO ()
--- createGame' handle color gameName appData = do
---   modifyMVar (maxGameIDMVar appData) $ \maxGameID -> do
---     let newGameID = maxGameID + 1
---     modifyMVar_ (waitingGamesMVar appData) $
---       return . M.insert newGameID (WaitingGame handle color gameName)
---     return (newGameID, newGameID)
+createGame' :: Handle -> Color -> String -> AppData -> IO GameID
+createGame' handle color gameName appData = do
+  modifyMVar (maxGameIDMVar appData) $ \maxGameID -> do
+    let newGameID = maxGameID + 1
+    modifyMVar_ (waitingGamesMVar appData) $
+      return . M.insert newGameID (WaitingGame handle color gameName)
+    return (newGameID, newGameID)
 
 
 -- joinGame :: Handle -> AppData -> String -> IO ()
