@@ -162,10 +162,10 @@ createGame' handle color gameName appData = do
 --           sendStartGame gameID handlesMap
 --           return (M.insert gameID playingGame playingGamesMap)
 
--- sendStartGame :: GameID -> Map Color Handle -> IO ()
--- sendStartGame gameID = mapM_ f . M.toList
---     where f (color, handle) = hPutStrLn handle $
---                               "STARTGAME " ++ show gameID ++ " " ++ show color
+sendStartGame :: GameID -> Map Color Handle -> IO ()
+sendStartGame gameID = mapM_ f . M.toList
+    where f (color, handle) = hPutStrLn handle $
+                              "STARTGAME " ++ show gameID ++ " " ++ show color
 
 -- handleMove :: Handle -> AppData -> String -> IO ()
 -- handleMove senderHandle appData str = do

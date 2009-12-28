@@ -3,6 +3,8 @@ import Control.Arrow
 import Control.Concurrent
 import Control.Exception
 import Control.Monad
+import Data.Map (Map)
+import qualified Data.Map as M
 import Data.Maybe
 import Network
 import System.IO
@@ -13,6 +15,8 @@ import Graphics.UI.Gtk.Glade
 
 import qualified ListBox as LB
 import Util
+import ChessTypes
+import SDLClient
 
 type GameID = Int
 
@@ -137,9 +141,13 @@ withConnectionHandle connectionMVar act =
 
 processMessagesFromServer :: Handle -> GUI -> IO ()
 processMessagesFromServer serverHandle gui = do
-  processLinesFromHandle serverHandle dispatchAList
-      where dispatchAList = [("GAMESLIST", updateGamesList gui),
-                             ("CREATEGAMEOK", waitForGame gui)]
+  playingGamesChansMVar <- newMVar M.empty
+  processLinesFromHandle serverHandle [
+      ("GAMESLIST"   , updateGamesList gui),
+      ("CREATEGAMEOK", waitForGame gui),
+      ("STARTGAME"   , startGame playingGamesChansMVar serverHandle),
+      ("MOVE"        , handleOpponentMove playingGamesChansMVar)
+    ]
 
 runCreateDialog :: MVar (Maybe Handle) -> GUI -> IO ()
 runCreateDialog connectionMVar gui = do
@@ -155,11 +163,40 @@ updateGamesList gui str = LB.setList (gamesListBox gui) (parse str)
     where parse = map (first read . second tail . span (/=' ')) . split '\t'
 
 waitForGame :: GUI -> String -> IO ()
-waitForGame gui str = do
-  msg <- messageDialogNew (Just (mainWindow gui)) []
-                          MessageInfo ButtonsClose
-                          text
-  dialogRun msg
+-- waitForGame gui str = do
+--   msg <- messageDialogNew (Just (mainWindow gui)) []
+--                           MessageInfo ButtonsClose
+--                           text
+--   dialogRun msg
+--   return ()
+--       where gameID = (read str) :: Int
+--             text = "En attente du démarrage de la partie no." ++ show gameID ++ "..."
+waitForGame _ _ = return ()
+
+startGame :: MVar (Map GameID (Chan String)) -> Handle -> String -> IO ()
+startGame playingGamesChansMVar serverHandle str = do
+  playerMovesChan <- newChan
+  opponentMovesChan <- newChan
+  modifyMVar_ playingGamesChansMVar $ return . M.insert gameID opponentMovesChan
+  forkIO $ handlePlayerMoves gameID playerMovesChan serverHandle
+  forkIO $ mainSDL playerMovesChan opponentMovesChan playerColor 
   return ()
-      where gameID = (read str) :: Int
-            text = "En attente du démarrage de la partie no." ++ show gameID ++ "..."
+    where [gameIDStr, colorStr] = words str
+          playerColor = read colorStr
+          gameID = read gameIDStr
+
+handlePlayerMoves :: GameID -> (Chan String) -> Handle -> IO ()
+handlePlayerMoves gameID playerMovesChan serverHandle =
+    forever $ hPutStrLn serverHandle . moveToMsg =<< readChan playerMovesChan
+        where moveToMsg moveStr = "MOVE " ++ show gameID ++ " " ++ moveStr
+
+handleOpponentMove :: MVar (Map GameID (Chan String)) -> String -> IO ()
+handleOpponentMove playingGamesChansMVar str = do
+  withMVar playingGamesChansMVar $ \playingGamesChanMap -> do
+    case M.lookup gameID playingGamesChanMap of
+      Nothing -> return ()
+      Just opponentMovesChan -> writeChan opponentMovesChan moveStr
+  where
+    [gameIDStr, moveStr] = words str
+    gameID = read gameIDStr
+      

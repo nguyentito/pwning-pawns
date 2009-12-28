@@ -8,9 +8,9 @@ type Square = (Int, Int)
 data Piece = Piece PieceType Color
              deriving (Eq, Ord)
 data PieceType = King | Queen | Rook | Bishop | Knight | Pawn
-               deriving (Eq, Show, Ord)
+               deriving (Eq, Show, Ord, Read)
 data Color = Black | White
-           deriving (Eq, Show, Ord)
+           deriving (Eq, Show, Ord, Read)
 
 otherColor White = Black
 otherColor Black = White
