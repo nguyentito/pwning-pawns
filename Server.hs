@@ -106,8 +106,6 @@ processMessagesFromClient clientHandle appData = do
                  ("JOINGAME"  , joinGame   clientHandle appData),
                  ("MOVE"      , handleMove clientHandle appData) ]
 
-handleMove = undefined
-
 -- The actual request handling --
 ---------------------------------
 
@@ -163,15 +161,14 @@ sendStartGame gameID = mapM_ f
     where f (color, handle) = hPutStrLn handle $
                               "STARTGAME " ++ show gameID ++ " " ++ show color
 
--- handleMove :: Handle -> AppData -> String -> IO ()
--- handleMove senderHandle appData str = do
---   let [gameIDStr, moveStr] = words str
---       gameID = read str
---   withMVar (playingGamesMVar appData) $ \playingGamesMap -> do
---     case M.lookup gameID playingGamesMap of
---       Nothing -> return ()
---       Just game -> do
---         let (_, opponentHandle) = M.findMin . M.filter (/= senderHandle) $ game
---         hPutStrLn opponentHandle str
+handleMove :: Handle -> AppData -> String -> IO ()
+handleMove senderHandle appData str = do
+  let [gameIDStr, moveStr] = words str
+      gameID = read str
+  withMVar (playingGamesMVar appData) $ \playingGamesMap -> do
+    case M.lookup gameID playingGamesMap of
+      Nothing -> return ()
+      Just game -> let opponentHandle = head . delete senderHandle $ playersHandles game in
+                   hPutStrLn opponentHandle str
     
     
