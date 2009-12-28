@@ -183,7 +183,6 @@ joinGame connectionMVar gui = do
 
 startGame :: MVar (Map GameID (Chan String)) -> Handle -> String -> IO ()
 startGame playingGamesChansMVar serverHandle str = do
-  putStrLn $ "starting game no." ++ str
   playerMovesChan <- newChan
   opponentMovesChan <- newChan
   modifyMVar_ playingGamesChansMVar $ return . M.insert gameID opponentMovesChan
