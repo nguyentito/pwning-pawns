@@ -38,7 +38,7 @@ data WaitingGame = WaitingGame {
 -- Games currently playing
 data PlayingGame = PlayingGame {
       playingGameName :: String,
-      playersHandles :: Map Color Handle
+      playersHandles :: [Handle]
     }
 
 
@@ -151,17 +151,15 @@ joinGame handle appData gameIDStr = do
         modifyMVar_ (playingGamesMVar appData) $ \playingGamesMap -> do
           let playingGame = PlayingGame {
                               playingGameName = (waitingGameName game),
-                              playersHandles = handlesMap
+                              playersHandles = [creatorHandle game, handle]
                             }
-              handlesMap = M.fromList [
-                             (creatorColor game, creatorHandle game),
-                             (otherColor . creatorColor $ game, handle)
-                           ]
-          sendStartGame gameID handlesMap
+              playerColorList = [(creatorColor game, creatorHandle game),
+                                 (otherColor . creatorColor $ game, handle)]
+          sendStartGame gameID playerColorList
           return (M.insert gameID playingGame playingGamesMap)
 
-sendStartGame :: GameID -> Map Color Handle -> IO ()
-sendStartGame gameID = mapM_ f . M.toList
+sendStartGame :: GameID -> [(Color, Handle)] -> IO ()
+sendStartGame gameID = mapM_ f
     where f (color, handle) = hPutStrLn handle $
                               "STARTGAME " ++ show gameID ++ " " ++ show color
 
