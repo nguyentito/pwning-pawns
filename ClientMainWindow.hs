@@ -179,10 +179,11 @@ joinGame connectionMVar gui = do
   when (not (null gameSelection)) $ do
     let selectedGameID = head gameSelection
     withConnectionHandle connectionMVar $ \handle -> do
-      hPutStrLn handle $ "JOINGAME " ++ show gameID
+      hPutStrLn handle $ "JOINGAME " ++ show selectedGameID
 
 startGame :: MVar (Map GameID (Chan String)) -> Handle -> String -> IO ()
 startGame playingGamesChansMVar serverHandle str = do
+  putStrLn $ "starting game no." ++ str
   playerMovesChan <- newChan
   opponentMovesChan <- newChan
   modifyMVar_ playingGamesChansMVar $ return . M.insert gameID opponentMovesChan

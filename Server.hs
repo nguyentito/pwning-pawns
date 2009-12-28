@@ -169,6 +169,6 @@ handleMove senderHandle appData str = do
     case M.lookup gameID playingGamesMap of
       Nothing -> return ()
       Just game -> let opponentHandle = head . delete senderHandle $ playersHandles game in
-                   hPutStrLn opponentHandle str
+                   hPutStrLn opponentHandle $ "MOVE " ++ str
     
     
