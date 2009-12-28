@@ -74,7 +74,7 @@ main = withSocketsDo $ do
       Nothing -> runConnectDialog gui connectionMVar
       Just handle -> disconnect handle gui >> swapMVar connectionMVar Nothing >> return ()
   onClicked (btnCreate gui) $ runCreateDialog connectionMVar gui
-  --  onClicked (btnJoin gui) $ joinGame connectionMVar gui
+  onClicked (btnJoin gui) $ joinGame connectionMVar gui
   timeoutAddFull (True <$ yield) priorityDefaultIdle 100
   mainGUI
 
@@ -172,6 +172,14 @@ waitForGame :: GUI -> String -> IO ()
 --       where gameID = (read str) :: Int
 --             text = "En attente du démarrage de la partie no." ++ show gameID ++ "..."
 waitForGame _ _ = return ()
+
+joinGame :: MVar (Maybe Handle) -> GUI -> IO ()
+joinGame connectionMVar gui = do
+  gameSelection <- LB.getSelection (gamesListBox gui)
+  when (not (null gameSelection)) $ do
+    let selectedGameID = head gameSelection
+    withConnectionHandle connectionMVar $ \handle -> do
+      hPutStrLn handle $ "JOINGAME " ++ show gameID
 
 startGame :: MVar (Map GameID (Chan String)) -> Handle -> String -> IO ()
 startGame playingGamesChansMVar serverHandle str = do

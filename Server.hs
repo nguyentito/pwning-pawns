@@ -106,7 +106,6 @@ processMessagesFromClient clientHandle appData = do
                  ("JOINGAME"  , joinGame   clientHandle appData),
                  ("MOVE"      , handleMove clientHandle appData) ]
 
-joinGame = undefined
 handleMove = undefined
 
 -- The actual request handling --
@@ -142,25 +141,24 @@ createGame' handle color gameName appData = do
       return . M.insert newGameID (WaitingGame handle color gameName)
     return (newGameID, newGameID)
 
-
--- joinGame :: Handle -> AppData -> String -> IO ()
--- joinGame handle appData gameIDStr = do
---   let gameID = read gameIDStr
---   modifyMVar_ (waitingGamesMVar appData) $ \waitingGamesMap ->
---     case M.lookup gameID waitingGamesMap of
---       Nothing -> return waitingGamesMap
---       Just game -> M.delete gameID waitingGamesMap <$ do
---         modifyMVar_ (playingGamesMVar appData) $ \playingGamesMap -> do
---           let playingGame = PlayingGame {
---                               playingGameName = (waitingGameName game),
---                               playersHandles = handlesMap
---                             }
---               handlesMap = M.fromList [
---                              (creatorColor game, creatorHandle game),
---                              (otherColor . creatorColor $ game, handle)
---                            ]
---           sendStartGame gameID handlesMap
---           return (M.insert gameID playingGame playingGamesMap)
+joinGame :: Handle -> AppData -> String -> IO ()
+joinGame handle appData gameIDStr = do
+  let gameID = read gameIDStr
+  modifyMVar_ (waitingGamesMVar appData) $ \waitingGamesMap ->
+    case M.lookup gameID waitingGamesMap of
+      Nothing -> return waitingGamesMap
+      Just game -> M.delete gameID waitingGamesMap <$ do
+        modifyMVar_ (playingGamesMVar appData) $ \playingGamesMap -> do
+          let playingGame = PlayingGame {
+                              playingGameName = (waitingGameName game),
+                              playersHandles = handlesMap
+                            }
+              handlesMap = M.fromList [
+                             (creatorColor game, creatorHandle game),
+                             (otherColor . creatorColor $ game, handle)
+                           ]
+          sendStartGame gameID handlesMap
+          return (M.insert gameID playingGame playingGamesMap)
 
 sendStartGame :: GameID -> Map Color Handle -> IO ()
 sendStartGame gameID = mapM_ f . M.toList
