@@ -4,6 +4,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Data.Char
+import Data.IORef
 import Data.List
 import Data.Maybe
 import qualified Data.Foldable as F
@@ -20,42 +21,76 @@ import Graphics.Rendering.Cairo
 import ChessTypes
 import Common
 
+data AppData = AppData {
+      piecesImagesMap :: Map Piece Surface,
+      playerMovesChan :: Chan String,
+      opponentMovesChan :: Chan String,
+      playerColor :: Color
+    }
+
+data AppState = AppState {
+      position :: Position,
+      selectedSquare :: Maybe Square,
+      currentMovesMap :: Maybe (Map Square Move),
+      sideToPlay :: Color
+    }
+
 startGameWindow :: Chan String -> Chan String -> Color -> Map Piece Surface -> IO Window
 startGameWindow playerMovesChan opponentMovesChan playerColor piecesImagesMap = do
   Just xml <- xmlNew "client-game-window.glade"
   window <- xmlGetWidget xml castToWindow "window"
   canvas <- xmlGetWidget xml castToDrawingArea "canvas"
   widgetShowAll window
-  onExpose canvas $ const (True <$ updateCanvas canvas piecesImagesMap)
-  onButtonPress canvas handleButtonPress
+  let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
+  stateRef <- newIORef $ AppState {
+                position = startingPosition,
+                selectedSquare = Nothing,
+                currentMovesMap = Nothing,
+                sideToPlay = White
+              }
+  onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
+  onButtonPress canvas (handleButtonPress canvas appData stateRef)
   return window
 
-handleButtonPress :: Event -> IO Bool
-handleButtonPress evt = do
-  printf "%s mouse button pressed at (%f,%f)\n" btnDesc (eventX evt) (eventY evt)
+handleButtonPress :: DrawingArea -> AppData -> IORef AppState -> Event -> IO Bool
+handleButtonPress canvas appData stateRef evt = do
+  when (eventButton evt == LeftButton) $ do
+    (w, h) <- widgetGetSize canvas
+    let x = eventX evt
+        y = eventY evt
+        c = fromIntegral $ (min w h) - 2
+        square = (floor ((x - 1) / (c/8)) + 1,
+                  8 - floor ((y - 1) / (c/8)))
+    onClickedSquare square appData stateRef
+    updateCanvas canvas appData stateRef
   return True
-      where btnDesc = case eventButton evt of
-                        LeftButton -> "left"
-                        RightButton -> "right"
-                        _ -> "unknown"
 
-updateCanvas :: DrawingArea -> Map Piece Surface -> IO ()
-updateCanvas canvas piecesImagesMap = do
+onClickedSquare :: Square -> AppData -> IORef AppState -> IO ()
+onClickedSquare square@(col,row) appData stateRef = do
+  modifyIORef stateRef (\s -> s { selectedSquare = Just square })
+  printf "selected square (%d, %d)\n" col row
+
+updateCanvas :: DrawingArea -> AppData -> IORef AppState -> IO ()
+updateCanvas canvas appData stateRef = do
   (w, h) <- widgetGetSize canvas
-  flip renderWithDrawable (drawBoard w h piecesImagesMap) =<< widgetGetDrawWindow canvas
+  dw <- widgetGetDrawWindow canvas
+  state <- readIORef stateRef
+  renderWithDrawable dw (drawBoard w h appData state)
 
 darkTileColor = (110, 128, 158)
 lightTileColor = (209, 205, 184)
 
-drawBoard :: Int -> Int -> Map Piece Surface -> Render ()
-drawBoard w h piecesImagesMap = do
+drawBoard :: Int -> Int -> AppData -> AppState -> Render ()
+drawBoard w h appData appState = do
   let c = fromIntegral $ (min w h) - 2
   translate 1 1
 
+  -- dark color background (dark squares)
   let (r,g,b) = darkTileColor in setSourceRGB (r/255) (g/255) (b/255)
   rectangle 0 0 c c
   fill
   
+  -- light squares
   let (r,g,b) = lightTileColor in setSourceRGB (r/255) (g/255) (b/255)
   let lightSquares = map snd . filter fst
                      . zip (cycle (take 8 (cycle [True, False]) ++ take 8 (cycle [False, True])))
@@ -63,14 +98,25 @@ drawBoard w h piecesImagesMap = do
   forM_ lightSquares $ \(x, y) -> rectangle (x*c) (y*c) (c/8) (c/8)
   fill
 
+  -- black lines = grid
   setSourceRGB 0 0 0
-  setLineWidth 4
+  setLineWidth 2
   forM_ [0..8] $ \i -> do
     moveTo 0 (i*c/8) >> lineTo c (i*c/8)
     moveTo (i*c/8) 0 >> lineTo (i*c/8) c
   stroke
 
-  drawPosition c piecesImagesMap startingPosition
+  -- highlight selected square (green)
+  case selectedSquare appState of
+    Nothing -> return ()
+    Just (col, row) -> do
+      setSourceRGB 0 255 0
+      setLineWidth 4
+      rectangle ((fromIntegral col - 1) * c / 8) ((8 - fromIntegral row) * c / 8) (c/8) (c/8)
+      stroke
+
+  -- draw the pieces themselves
+  drawPosition c (piecesImagesMap appData) (position appState)
 
 drawPosition :: Double -> Map Piece Surface -> Position -> Render ()
 drawPosition c piecesImagesMap (Position piecesMap _) =
