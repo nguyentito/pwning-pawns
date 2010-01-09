@@ -32,7 +32,12 @@ withPiecesImages act = withImageSurfacesFromPNGs files
 
 main = do
   initGUI
+  playerMovesChan <- newChan
+  opponentMovesChan <- newChan
+  forkIO $ printMoves playerMovesChan
   withPiecesImages $ \piecesImagesMap -> do
-    window <- join $ startGameWindow <$> newChan <*> newChan <*> return White <*> return piecesImagesMap
+    window <- startGameWindow playerMovesChan opponentMovesChan White piecesImagesMap
     onDestroy window mainQuit
     mainGUI
+
+printMoves playerMovesChan = forever $ putStrLn =<< readChan playerMovesChan
