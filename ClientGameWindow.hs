@@ -18,6 +18,7 @@ import Graphics.UI.Gtk.Glade
 import Graphics.UI.Gtk.Cairo
 import Graphics.Rendering.Cairo
 
+import AlgebraicNotation
 import ChessTypes
 import Common
 
@@ -49,10 +50,13 @@ startGameWindow playerMovesChan opponentMovesChan playerColor piecesImagesMap = 
                 sideToPlay = White
               }
   onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
-  onButtonPress canvas (handleButtonPress canvas appData stateRef)
+  onButtonPress canvas $ \evt -> do
+    handleButtonPress canvas appData stateRef evt
+    updateCanvas canvas appData stateRef
+    return True
   return window
 
-handleButtonPress :: DrawingArea -> AppData -> IORef AppState -> Event -> IO Bool
+handleButtonPress :: DrawingArea -> AppData -> IORef AppState -> Event -> IO ()
 handleButtonPress canvas appData stateRef evt = do
   when (eventButton evt == LeftButton) $ do
     (w, h) <- widgetGetSize canvas
@@ -62,13 +66,39 @@ handleButtonPress canvas appData stateRef evt = do
         square = (floor ((x - 1) / (c/8)) + 1,
                   8 - floor ((y - 1) / (c/8)))
     onClickedSquare square appData stateRef
-    updateCanvas canvas appData stateRef
-  return True
 
 onClickedSquare :: Square -> AppData -> IORef AppState -> IO ()
 onClickedSquare square@(col,row) appData stateRef = do
-  modifyIORef stateRef (\s -> s { selectedSquare = Just square })
-  printf "selected square (%d, %d)\n" col row
+  appState <- readIORef stateRef
+  when (sideToPlay appState == playerColor appData) $ do
+    case selectedSquare appState of
+      Just selSq | selSq == square -> unselectSquare
+                 | otherwise -> case M.lookup square =<< currentMovesMap appState of
+                                  Just move -> do applyPlayerMove move appData stateRef
+                                                  unselectSquare
+                                  Nothing -> return ()
+      Nothing -> selectSquare (Just square) appData stateRef
+    where unselectSquare = selectSquare Nothing appData stateRef
+
+selectSquare :: Maybe Square -> AppData -> IORef AppState -> IO ()
+selectSquare Nothing _ stateRef =
+    modifyIORef stateRef $ \s -> s { selectedSquare = Nothing,
+                                     currentMovesMap = Nothing }
+selectSquare maybeSquare@(Just square) appData stateRef = do
+  pos@(Position board _) <- position <$> readIORef stateRef
+  case M.lookup square board of 
+    Just piece@(Piece _ color)
+        | color == playerColor appData ->
+            let newMovesMap = legalMovesMap piece square pos in
+            modifyIORef stateRef $ \s -> s { selectedSquare = maybeSquare,
+                                             currentMovesMap = Just newMovesMap }
+    _ -> return ()
+
+applyPlayerMove :: Move -> AppData -> IORef AppState -> IO ()
+applyPlayerMove move appData stateRef = do
+  modifyIORef stateRef $ \s -> s { position = applyMove move (playerColor appData) (position s),
+                                   sideToPlay = otherColor $ playerColor appData }
+  writeChan (playerMovesChan appData) $ printMove move
 
 updateCanvas :: DrawingArea -> AppData -> IORef AppState -> IO ()
 updateCanvas canvas appData stateRef = do
