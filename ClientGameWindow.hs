@@ -1,32 +1,34 @@
+module ClientGameWindow (startGameWindow) where
+
 import Control.Applicative
-import Data.Foldable
-import System.FilePath
+import Control.Concurrent
+import Control.Monad
+import Data.Char
+import Data.List
+import Data.Maybe
+import qualified Data.Foldable as F
+import Data.Map (Map)
+import qualified Data.Map as M
 import Text.Printf
 
-import Graphics.UI.Gtk hiding (fill)
+import Graphics.UI.Gtk hiding (fill, Color)
 import Graphics.UI.Gtk.Gdk.Events
 import Graphics.UI.Gtk.Glade
 import Graphics.UI.Gtk.Cairo
 import Graphics.Rendering.Cairo
 
-main :: IO ()
-main = do
-  initGUI
+import ChessTypes
+import Common
+
+startGameWindow :: Chan String -> Chan String -> Color -> Map Piece Surface -> IO Window
+startGameWindow playerMovesChan opponentMovesChan playerColor piecesImagesMap = do
   Just xml <- xmlNew "client-game-window.glade"
   window <- xmlGetWidget xml castToWindow "window"
   canvas <- xmlGetWidget xml castToDrawingArea "canvas"
   widgetShowAll window
-  withImageSurfacesFromPNGs (map ("fantasy-chess-pieces" </>)
-                                 ["bk.png", "bq.png", "wk.png", "wq.png"]) $ \imgs -> do
-    onExpose canvas $ const (True <$ updateCanvas canvas imgs)
-    onButtonPress canvas handleButtonPress
-    onDestroy window mainQuit
-    mainGUI
-
-withImageSurfacesFromPNGs :: [FilePath] -> ([Surface] -> IO a) -> IO a
-withImageSurfacesFromPNGs [] act = act []
-withImageSurfacesFromPNGs (fp:fps) act =
-    withImageSurfaceFromPNG fp $ \img -> withImageSurfacesFromPNGs fps (act . (img:))
+  onExpose canvas $ const (True <$ updateCanvas canvas piecesImagesMap)
+  onButtonPress canvas handleButtonPress
+  return window
 
 handleButtonPress :: Event -> IO Bool
 handleButtonPress evt = do
@@ -37,16 +39,16 @@ handleButtonPress evt = do
                         RightButton -> "right"
                         _ -> "unknown"
 
-updateCanvas :: DrawingArea -> [Surface] -> IO ()
-updateCanvas canvas imgs = do
+updateCanvas :: DrawingArea -> Map Piece Surface -> IO ()
+updateCanvas canvas piecesImagesMap = do
   (w, h) <- widgetGetSize canvas
-  flip renderWithDrawable (drawBoard w h imgs) =<< widgetGetDrawWindow canvas
+  flip renderWithDrawable (drawBoard w h piecesImagesMap) =<< widgetGetDrawWindow canvas
 
 darkTileColor = (110, 128, 158)
 lightTileColor = (209, 205, 184)
 
-drawBoard :: Int -> Int -> [Surface] -> Render ()
-drawBoard w h imgs = do
+drawBoard :: Int -> Int -> Map Piece Surface -> Render ()
+drawBoard w h piecesImagesMap = do
   let c = fromIntegral $ (min w h) - 2
   translate 1 1
 
@@ -55,10 +57,10 @@ drawBoard w h imgs = do
   fill
   
   let (r,g,b) = lightTileColor in setSourceRGB (r/255) (g/255) (b/255)
-  let whiteSquares = map snd . filter fst
+  let lightSquares = map snd . filter fst
                      . zip (cycle (take 8 (cycle [True, False]) ++ take 8 (cycle [False, True])))
                      $ [ (x/8,y/8) | x <- [0..7], y <- [0..7] ]
-  forM_ whiteSquares $ \(x, y) -> rectangle (x*c) (y*c) (c/8) (c/8)
+  forM_ lightSquares $ \(x, y) -> rectangle (x*c) (y*c) (c/8) (c/8)
   fill
 
   setSourceRGB 0 0 0
@@ -68,10 +70,17 @@ drawBoard w h imgs = do
     moveTo (i*c/8) 0 >> lineTo (i*c/8) c
   stroke
 
-  forM_ (zip [0..] imgs) $ \(i, img) -> do
-    save
-    translate (i*c/8) 0
-    scale ((c/8)/920) ((c/8)/920)
-    setSourceSurface img 0 0
-    paint
-    restore
+  drawPosition c piecesImagesMap startingPosition
+
+drawPosition :: Double -> Map Piece Surface -> Position -> Render ()
+drawPosition c piecesImagesMap (Position piecesMap _) =
+    F.sequence_ . M.mapWithKey (drawPiece c piecesImagesMap) $ piecesMap
+
+drawPiece :: Double -> Map Piece Surface -> Square -> Piece -> Render ()
+drawPiece c piecesImagesMap (col, row) piece = do
+  save
+  translate (fromIntegral row * c / 8) (fromIntegral col * c / 8)
+  scale ((c/8)/920) ((c/8)/920)
+  setSourceSurface (piecesImagesMap M.! piece) 0 0
+  paint
+  restore
