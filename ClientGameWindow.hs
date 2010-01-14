@@ -10,6 +10,7 @@ import Data.Maybe
 import qualified Data.Foldable as F
 import Data.Map (Map)
 import qualified Data.Map as M
+import System.FilePath
 import Text.Printf
 
 import Graphics.UI.Gtk hiding (fill, Color)
@@ -17,6 +18,7 @@ import Graphics.UI.Gtk.Gdk.Events
 import Graphics.UI.Gtk.Glade
 import Graphics.UI.Gtk.Cairo
 import Graphics.Rendering.Cairo
+import Graphics.Rendering.Cairo.Internal.Surfaces.PNG
 
 import AlgebraicNotation
 import ChessTypes
@@ -40,12 +42,13 @@ data AppState = AppState {
       sideToPlay :: Color
     }
 
-startGameWindow :: Chan String -> Chan String -> Color -> Map Piece Surface -> IO Window
-startGameWindow playerMovesChan opponentMovesChan playerColor piecesImagesMap = do
+startGameWindow :: Chan String -> Chan String -> Color -> IO Window
+startGameWindow playerMovesChan opponentMovesChan playerColor = do
   Just xml <- xmlNew "client-game-window.glade"
   window <- xmlGetWidget xml castToWindow "window"
   canvas <- xmlGetWidget xml castToDrawingArea "canvas"
   widgetShowAll window
+  piecesImagesMap <- loadPiecesImagesMap
   let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
                         (widgetQueueDraw canvas)
   stateRef <- newIORef $ AppState {
@@ -59,6 +62,20 @@ startGameWindow playerMovesChan opponentMovesChan playerColor piecesImagesMap = 
   timeoutAdd (handleOpponentMoves appData stateRef) 100
   return window
 
+loadPiecesImagesMap :: IO (Map Piece Surface)
+loadPiecesImagesMap = do
+  surfaceList <- mapM imageSurfaceCreateFromPNG filenameList
+  return $ M.fromList (zip pieceList surfaceList)
+    where pieceList = [ Piece piecetype color
+                        | piecetype <- piecetypeList, color <- [White, Black]]
+          piecetypeList = [King, Queen, Rook, Bishop, Knight, Pawn]
+          filenameList = map pieceToFilename pieceList
+          pieceToFilename (Piece piecetype color) = 
+              "fantasy-chess-pieces" </> (letter1 : letter2 : ".png")
+                  where letter1 = [(Black, 'b'), (White, 'w')] ! color
+                        letter2 = (zip piecetypeList "kqrbnp") ! piecetype
+          lst ! ix = fromJust $ lookup ix lst
+                        
 
 -- Event handling --
 --------------------

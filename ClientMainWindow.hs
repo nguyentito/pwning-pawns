@@ -16,7 +16,7 @@ import Graphics.UI.Gtk.Glade
 import qualified ListBox as LB
 import Util
 import ChessTypes
-import SDLClient
+import ClientGameWindow
 
 type GameID = Int
 
@@ -187,7 +187,7 @@ startGame playingGamesChansMVar serverHandle str = do
   opponentMovesChan <- newChan
   modifyMVar_ playingGamesChansMVar $ return . M.insert gameID opponentMovesChan
   forkIO $ handlePlayerMoves gameID playerMovesChan serverHandle
-  forkIO $ mainSDL playerMovesChan opponentMovesChan playerColor 
+  startGameWindow playerMovesChan opponentMovesChan playerColor 
   return ()
     where [gameIDStr, colorStr] = words str
           playerColor = read colorStr
