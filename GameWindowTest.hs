@@ -35,9 +35,11 @@ main = do
   playerMovesChan <- newChan
   opponentMovesChan <- newChan
   forkIO $ printMoves playerMovesChan
+  forkIO $ inputMoves opponentMovesChan
   withPiecesImages $ \piecesImagesMap -> do
     window <- startGameWindow playerMovesChan opponentMovesChan White piecesImagesMap
     onDestroy window mainQuit
     mainGUI
 
 printMoves playerMovesChan = forever $ putStrLn =<< readChan playerMovesChan
+inputMoves opponentMovesChan = forever $ writeChan opponentMovesChan =<< getLine

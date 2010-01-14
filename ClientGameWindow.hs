@@ -22,11 +22,15 @@ import AlgebraicNotation
 import ChessTypes
 import Common
 
+-- Main --
+----------
+
 data AppData = AppData {
       piecesImagesMap :: Map Piece Surface,
       playerMovesChan :: Chan String,
       opponentMovesChan :: Chan String,
-      playerColor :: Color
+      playerColor :: Color,
+      requestRedraw :: IO ()
     }
 
 data AppState = AppState {
@@ -43,6 +47,7 @@ startGameWindow playerMovesChan opponentMovesChan playerColor piecesImagesMap = 
   canvas <- xmlGetWidget xml castToDrawingArea "canvas"
   widgetShowAll window
   let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
+                        (widgetQueueDraw canvas)
   stateRef <- newIORef $ AppState {
                 position = startingPosition,
                 selectedSquare = Nothing,
@@ -50,13 +55,15 @@ startGameWindow playerMovesChan opponentMovesChan playerColor piecesImagesMap = 
                 sideToPlay = White
               }
   onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
-  onButtonPress canvas $ \evt -> do
-    handleButtonPress canvas appData stateRef evt
-    updateCanvas canvas appData stateRef
-    return True
+  onButtonPress canvas $ handleButtonPress canvas appData stateRef
+  timeoutAdd (handleOpponentMoves appData stateRef) 100
   return window
 
-handleButtonPress :: DrawingArea -> AppData -> IORef AppState -> Event -> IO ()
+
+-- Event handling --
+--------------------
+
+handleButtonPress :: DrawingArea -> AppData -> IORef AppState -> Event -> IO Bool
 handleButtonPress canvas appData stateRef evt = do
   when (eventButton evt == LeftButton) $ do
     (w, h) <- widgetGetSize canvas
@@ -66,6 +73,8 @@ handleButtonPress canvas appData stateRef evt = do
         square = (floor ((x - 1) / (c/8)) + 1,
                   8 - floor ((y - 1) / (c/8)))
     onClickedSquare square appData stateRef
+    requestRedraw appData
+  return True
 
 onClickedSquare :: Square -> AppData -> IORef AppState -> IO ()
 onClickedSquare square@(col,row) appData stateRef = do
@@ -99,6 +108,26 @@ applyPlayerMove move appData stateRef = do
   modifyIORef stateRef $ \s -> s { position = applyMove move (playerColor appData) (position s),
                                    sideToPlay = otherColor $ playerColor appData }
   writeChan (playerMovesChan appData) $ printMove move
+
+
+-- Timer-triggered actions --
+-----------------------------
+
+handleOpponentMoves :: AppData -> IORef AppState -> IO Bool
+handleOpponentMoves appData stateRef = do
+  appState <- readIORef stateRef
+  when (sideToPlay appState /= playerColor appData) $ do
+    opponentHasPlayed <- not <$> isEmptyChan (opponentMovesChan appData)
+    when opponentHasPlayed $ do
+      opponentMove <- parseMove <$> readChan (opponentMovesChan appData)
+      modifyIORef stateRef (\s -> s { position = applyMove opponentMove (sideToPlay s) (position s),
+                                      sideToPlay = playerColor appData })
+  requestRedraw appData
+  return True
+
+
+-- Drawing --
+-------------
 
 updateCanvas :: DrawingArea -> AppData -> IORef AppState -> IO ()
 updateCanvas canvas appData stateRef = do
