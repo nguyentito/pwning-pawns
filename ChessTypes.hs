@@ -18,19 +18,22 @@ otherColor Black = White
 data Position = Position Board GameState
 type Board = Map Square Piece
 data GameState = GameState {
-      castlingMap :: Map (Color, CastlingSide) Bool
+      castlingMap :: Map (Color, CastlingSide) Bool,
+      enPassantPossibility :: Maybe Square
     }
 
-boardToPosition = flip Position (GameState (M.fromList [((White, Kingside), True),
-                                                        ((White, Queenside), True),
-                                                        ((Black, Kingside), True),
-                                                        ((Black, Queenside), True)]))
+boardToPosition = flip Position (GameState { castlingMap = defaultCastlingMap,
+                                             enPassantPossibility = Nothing })
+    where defaultCastlingMap = M.fromList [((White, Kingside), True),
+                                           ((White, Queenside), True),
+                                           ((Black, Kingside), True),
+                                           ((Black, Queenside), True)]
 
 data CastlingSide = Queenside | Kingside
                     deriving (Eq, Show, Ord)
 
 data Move = Castling CastlingSide
-          | EnPassant { moveOrig :: Square, targetCol :: Int }
+          | EnPassant { moveOrig :: Square, moveDest :: Square }
           | StandardMove { movePiece :: PieceType,
                            moveOrig :: Square,
                            moveDest :: Square }

@@ -51,7 +51,9 @@ applyMove (StandardMove pieceType orig dest) color (Position oldBoard oldState) 
     M.insert dest (Piece pieceType color) .
     M.delete orig $ oldBoard
         where makePositionWithNewState = flip Position newState
-              newState = oldState { castlingMap = modifyCastlingMap (castlingMap oldState) }
+              newState = oldState { castlingMap = modifyCastlingMap (castlingMap oldState),
+                                    enPassantPossibility = newEnPassantPossibility
+                                  }
               modifyCastlingMap = case pieceType of
                                     King -> M.insert (color, Kingside) False .
                                             M.insert (color, Queenside) False
@@ -64,8 +66,21 @@ applyMove (StandardMove pieceType orig dest) color (Position oldBoard oldState) 
               castlingRow = case color of
                               White -> 1
                               Black -> 8
+              newEnPassantPossibility
+                  | moveIsDoublePawnAdvance = Just (fst orig, (snd orig + snd dest) `div` 2)
+                  | otherwise               = Nothing
+              moveIsDoublePawnAdvance = pieceType == Pawn
+                                        && fst orig == fst dest
+                                        && abs (snd orig - snd dest) == 2
 
-applyMove (EnPassant _ _) _ _ = undefined
+applyMove (EnPassant orig dest) color (Position oldBoard oldState) =
+    Position newBoard newState
+        where newBoard = M.insert dest (Piece Pawn color) .
+                         M.delete orig .
+                         M.delete capturedPawnLocation $
+                         oldBoard
+              newState = oldState { enPassantPossibility = Nothing }
+              capturedPawnLocation = (fst dest, snd orig)
 
 --
 -- legalMoves section
@@ -79,6 +94,7 @@ legalMovesMap piece@(Piece _ color) square position = M.fromList assocList
 
 associatedSquare :: Color -> Move -> Square -- depends on color just b/c of castling
 associatedSquare color (StandardMove {moveDest=dest}) = dest
+associatedSquare color (EnPassant {moveDest=dest}) = dest
 associatedSquare color (Castling side) = (castlingKingDestCol side, castlingRow color)
 
 
@@ -157,8 +173,8 @@ castlingPossibilities (Piece _ color) _ (Position board state) =
                                                 | col <- castlingColsInBetween side]
 
 pawnMoves :: MoveFunction
-pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
-    -- will add en passant later
+pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board state) =
+    maybeAddEnPassant .
     map (makeStandardMove pieceType orig) . catMaybes $
     maybeDoubleAdvanceMvt : maybeAdvanceMvt : map Just captureMvts
         where vDiff = case color of White -> ((+) 1);
@@ -182,6 +198,11 @@ pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
                                             _ -> False
               pawnRow = case color of White -> 2;
                                       Black -> 7
+              maybeAddEnPassant = case enPassantPossibility state of
+                                    Just dest@(destCol, destRow)
+                                        | abs (origCol - destCol) == 1 && destRow == vDiff origRow ->
+                                            ( (EnPassant orig dest) :)
+                                    _ -> id
                         
 
 applyDiff :: MoveSquareDiff -> Square -> Square
