@@ -61,7 +61,7 @@ loadGUI = do
       <*> xmlGetWidget xml castToButton   "cgdBtnCancel"
 
 main :: IO ()
-main = withSocketsDo $ do
+main = withSocketsDo . withGameWindowResourcesLoaded $ do
   connectionMVar <- newMVar Nothing
   initGUI
   gui <- loadGUI

@@ -1,4 +1,7 @@
-module ClientGameWindow (startGameWindow) where
+module ClientGameWindow
+    (startGameWindow,
+     withGameWindowResourcesLoaded)
+where
 
 import Control.Applicative
 import Control.Concurrent
@@ -11,6 +14,7 @@ import qualified Data.Foldable as F
 import Data.Map (Map)
 import qualified Data.Map as M
 import System.FilePath
+import System.IO.Unsafe
 import Text.Printf
 
 import Graphics.UI.Gtk hiding (fill, Color)
@@ -44,28 +48,49 @@ data AppState = AppState {
 
 startGameWindow :: Chan String -> Chan String -> Color -> IO Window
 startGameWindow playerMovesChan opponentMovesChan playerColor = do
-  Just xml <- xmlNew "client-game-window.glade"
-  window <- xmlGetWidget xml castToWindow "window"
-  canvas <- xmlGetWidget xml castToDrawingArea "canvas"
-  widgetShowAll window
-  piecesImagesMap <- loadPiecesImagesMap
-  let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
-                        (widgetQueueDraw canvas)
-  stateRef <- newIORef $ AppState {
-                position = startingPosition,
-                selectedSquare = Nothing,
-                currentMovesMap = Nothing,
-                sideToPlay = White
-              }
-  onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
-  onButtonPress canvas $ handleButtonPress canvas appData stateRef
-  timeoutAdd (handleOpponentMoves appData stateRef) 100
-  return window
+  maybePiecesImages <- readIORef piecesImagesRef
+  case maybePiecesImages of
+    Nothing -> error "You must call startGameWindow inside an action wrapped by withGameWindowResourcesLoaded"
+    Just piecesImagesMap -> do
+      Just xml <- xmlNew "client-game-window.glade"
+      window <- xmlGetWidget xml castToWindow "window"
+      canvas <- xmlGetWidget xml castToDrawingArea "canvas"
+      widgetShowAll window
+      let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
+                            (widgetQueueDraw canvas)
+      stateRef <- newIORef $ AppState {
+                              position = startingPosition,
+                              selectedSquare = Nothing,
+                              currentMovesMap = Nothing,
+                              sideToPlay = White
+                            }
+      onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
+      onButtonPress canvas $ handleButtonPress canvas appData stateRef
+      timeoutAdd (handleOpponentMoves appData stateRef) 100
+      return window
 
-loadPiecesImagesMap :: IO (Map Piece Surface)
-loadPiecesImagesMap = do
-  surfaceList <- mapM imageSurfaceCreateFromPNG filenameList
-  return $ M.fromList (zip pieceList surfaceList)
+-- Resources --
+---------------
+
+piecesImagesRef :: IORef (Maybe (Map Piece Surface))
+piecesImagesRef = unsafePerformIO $ newIORef Nothing
+
+withGameWindowResourcesLoaded :: IO a -> IO a
+withGameWindowResourcesLoaded act = do
+  withPiecesImages $ \piecesImagesMap -> do
+    writeIORef piecesImagesRef (Just piecesImagesMap)
+    x <- act
+    writeIORef piecesImagesRef Nothing
+    return x
+
+withImageSurfacesFromPNGs :: [FilePath] -> ([Surface] -> IO a) -> IO a
+withImageSurfacesFromPNGs [] act = act []
+withImageSurfacesFromPNGs (fp:fps) act =
+    withImageSurfaceFromPNG fp $ \img -> withImageSurfacesFromPNGs fps (act . (img:))
+ 
+withPiecesImages :: (Map Piece Surface -> IO a) -> IO a
+withPiecesImages act = withImageSurfacesFromPNGs filenameList
+                       $ \surfaceList -> act (M.fromList (zip pieceList surfaceList))
     where pieceList = [ Piece piecetype color
                         | piecetype <- piecetypeList, color <- [White, Black]]
           piecetypeList = [King, Queen, Rook, Bishop, Knight, Pawn]
