@@ -141,11 +141,14 @@ withConnectionHandle connectionMVar act =
 
 processMessagesFromServer :: Handle -> GUI -> IO ()
 processMessagesFromServer serverHandle gui = do
+  waitingGamesDialogsMVar <- newMVar M.empty
   playingGamesChansMVar <- newMVar M.empty
   processLinesFromHandle serverHandle [
       ("GAMESLIST"   , updateGamesList gui),
-      ("CREATEGAMEOK", waitForGame gui),
-      ("STARTGAME"   , startGame playingGamesChansMVar serverHandle),
+      ("CREATEGAMEOK", waitForGame gui waitingGamesDialogsMVar),
+      ("STARTGAME"   , startGame waitingGamesDialogsMVar
+                                 playingGamesChansMVar
+                                 serverHandle),
       ("MOVE"        , handleOpponentMove playingGamesChansMVar)
     ]
 
@@ -162,16 +165,15 @@ updateGamesList :: GUI -> String -> IO ()
 updateGamesList gui str = LB.setList (gamesListBox gui) (parse str)
     where parse = map (first read . second tail . span (/=' ')) . split '\t'
 
-waitForGame :: GUI -> String -> IO ()
--- waitForGame gui str = do
---   msg <- messageDialogNew (Just (mainWindow gui)) []
---                           MessageInfo ButtonsClose
---                           text
---   dialogRun msg
---   return ()
---       where gameID = (read str) :: Int
---             text = "En attente du démarrage de la partie no." ++ show gameID ++ "..."
-waitForGame _ _ = return ()
+waitForGame :: GUI -> MVar (Map GameID MessageDialog) -> String -> IO ()
+waitForGame gui waitingGamesDialogsMVar str = do
+  dialog <- messageDialogNew (Just (mainWindow gui)) []
+                             MessageInfo ButtonsNone
+                             text
+  widgetShowAll dialog
+  modifyMVar_ waitingGamesDialogsMVar $ return . M.insert gameID dialog
+      where gameID = read str
+            text = "En attente du démarrage de la partie no." ++ show gameID ++ "..."
 
 joinGame :: MVar (Maybe Handle) -> GUI -> IO ()
 joinGame connectionMVar gui = do
@@ -181,8 +183,15 @@ joinGame connectionMVar gui = do
     withConnectionHandle connectionMVar $ \handle -> do
       hPutStrLn handle $ "JOINGAME " ++ show selectedGameID
 
-startGame :: MVar (Map GameID (Chan String)) -> Handle -> String -> IO ()
-startGame playingGamesChansMVar serverHandle str = do
+startGame :: MVar (Map GameID MessageDialog)
+          -> MVar (Map GameID (Chan String))
+          -> Handle
+          -> String
+          -> IO ()
+startGame waitingGamesDialogsMVar playingGamesChansMVar serverHandle str = do
+  modifyMVar_ waitingGamesDialogsMVar $ \waitingGamesDialogsMap -> do
+    maybe (return ()) (\dialog -> widgetDestroy dialog) $ M.lookup gameID waitingGamesDialogsMap
+    return $ M.delete gameID waitingGamesDialogsMap
   playerMovesChan <- newChan
   opponentMovesChan <- newChan
   modifyMVar_ playingGamesChansMVar $ return . M.insert gameID opponentMovesChan
