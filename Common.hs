@@ -165,7 +165,8 @@ pawnMoves (Piece pieceType color) orig@(origCol, origRow) (Position board _) =
                                     Black -> flip (-) 1
               maybeAdvanceMvt = maybeNonCaptureMvt (id, vDiff)
               maybeDoubleAdvanceMvt
-                  | origRow == pawnRow = maybeNonCaptureMvt (id, vDiff . vDiff)
+                  | origRow == pawnRow && isJust maybeAdvanceMvt =
+                      maybeNonCaptureMvt (id, vDiff . vDiff)
                   | otherwise = Nothing
               maybeNonCaptureMvt diff | destIsEmpty && (not outOfBounds) = Just dest
                                       | otherwise = Nothing
