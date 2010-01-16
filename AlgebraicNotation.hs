@@ -25,7 +25,7 @@ p_kingsideCastling = (Castling Kingside) <$ string "0-0"
 
 p_standardMove = StandardMove <$> p_pieceType <*> p_square <*> (p_separator *> p_square)
 
-p_enPassant = EnPassant <$> p_square <*> (p_separator *> p_square) <* string "e.p."
+p_enPassant = EnPassant <$> p_square <*> (p_separator *> p_square) <* string " e.p."
 
 p_pieceType = choice (map (\(piece, letter) -> piece <$ char letter) pieceLetterAssocList)
             <|> return Pawn
@@ -43,7 +43,7 @@ printMove (StandardMove pieceType (origCol, origRow) (destCol, destRow)) =
     [ colToChar origCol, rowToChar origRow, '-', colToChar destCol, rowToChar destRow ]
 printMove (EnPassant (origCol, origRow) (destCol, destRow)) =
     [ colToChar origCol, rowToChar origRow, 'x', colToChar destCol, rowToChar destRow ]
-    ++ "e.p."
+    ++ " e.p."
 
 colToChar = chr . (+ (ord 'a')) . (flip (-) 1)
 rowToChar = intToDigit

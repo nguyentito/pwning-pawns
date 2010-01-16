@@ -163,7 +163,7 @@ sendStartGame gameID = mapM_ f
 
 handleMove :: Handle -> AppData -> String -> IO ()
 handleMove senderHandle appData str = do
-  let [gameIDStr, moveStr] = words str
+  let (gameIDStr, ' ':moveStr) = span (/=' ') str
       gameID = read gameIDStr
   withMVar (playingGamesMVar appData) $ \playingGamesMap -> do
     case M.lookup gameID playingGamesMap of

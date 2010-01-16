@@ -205,6 +205,6 @@ handleOpponentMove playingGamesChansMVar str = do
       Nothing -> return ()
       Just opponentMovesChan -> writeChan opponentMovesChan moveStr
   where
-    [gameIDStr, moveStr] = words str
+    (gameIDStr, ' ':moveStr) = span (/=' ') str
     gameID = read gameIDStr
       
