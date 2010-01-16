@@ -182,13 +182,23 @@ drawBoard w h appData appState = do
     moveTo (i*c/8) 0 >> lineTo (i*c/8) c
   stroke
 
-  -- highlight selected square (green)
+  -- highlight selected square (blue)
   case selectedSquare appState of
     Nothing -> return ()
     Just (col, row) -> do
-      setSourceRGB 0 255 0
+      setSourceRGB 0 0 255
       setLineWidth 4
       rectangle ((fromIntegral col - 1) * c / 8) ((8 - fromIntegral row) * c / 8) (c/8) (c/8)
+      stroke
+
+  -- highlight possible moves (green)
+  case currentMovesMap appState of
+    Nothing -> return ()
+    Just movesMap -> do
+      setSourceRGB 0 255 0
+      setLineWidth 4
+      forM_ (M.keys movesMap) $ \(col, row) -> do
+        rectangle ((fromIntegral col - 1) * c / 8) ((8 - fromIntegral row) * c / 8) (c/8) (c/8)
       stroke
 
   -- draw the pieces themselves
