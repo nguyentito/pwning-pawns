@@ -62,7 +62,7 @@ startGameWindow playerMovesChan opponentMovesChan playerColor = do
       window <- xmlGetWidget xml castToWindow "window"
       canvas <- xmlGetWidget xml castToDrawingArea "canvas"
       toolbar <- xmlGetWidget xml castToToolbar "toolbar"
-      toolbarAppendNewButton toolbar "gtk-quit" Nothing
+      quitButton <- toolbarAppendNewButton toolbar "gtk-quit" Nothing
       statusLabel <- xmlGetWidget xml castToLabel "statusLabel"
       set statusLabel [ labelText := "C'est au tour des blancs de jouer." ]
       widgetShowAll window
@@ -75,10 +75,23 @@ startGameWindow playerMovesChan opponentMovesChan playerColor = do
                               currentMovesMap = Nothing,
                               currentStatus = GameOngoing { sideToPlay = White }
                             }
+      onDelete window $ const (not <$> confirmQuitGame window)
+      onClicked quitButton $ do
+        userConfirmation <- confirmQuitGame window
+        when userConfirmation $ widgetDestroy window
       onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
       onButtonPress canvas $ handleButtonPress canvas appData stateRef
       timeoutAdd (handleOpponentMoves appData stateRef) 100
       return window
+
+confirmQuitGame :: Window -> IO Bool
+confirmQuitGame window = do
+  dialog <- messageDialogNew (Just window) [DialogModal]
+                             MessageQuestion ButtonsYesNo
+                             "Voulez-vous vraiment quitter la partie ?"
+  response <- dialogRun dialog
+  widgetDestroy dialog
+  return $ response == ResponseYes
 
 -- Resources --
 ---------------
