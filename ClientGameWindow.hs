@@ -36,15 +36,21 @@ data AppData = AppData {
       playerMovesChan :: Chan String,
       opponentMovesChan :: Chan String,
       playerColor :: Color,
-      requestRedraw :: IO ()
+      requestRedraw :: IO (),
+      setStatusMessage :: String -> IO ()
     }
 
 data AppState = AppState {
       position :: Position,
       selectedSquare :: Maybe Square,
       currentMovesMap :: Maybe (Map Square Move),
-      sideToPlay :: Color
+      currentStatus :: GameStatus
     }
+
+data GameStatus = GameOngoing { sideToPlay :: Color }
+                | Checkmate { gameWinner :: Color }
+                | Draw
+                  deriving (Eq)
 
 startGameWindow :: Chan String -> Chan String -> Color -> IO Window
 startGameWindow playerMovesChan opponentMovesChan playerColor = do
@@ -57,14 +63,17 @@ startGameWindow playerMovesChan opponentMovesChan playerColor = do
       canvas <- xmlGetWidget xml castToDrawingArea "canvas"
       toolbar <- xmlGetWidget xml castToToolbar "toolbar"
       toolbarAppendNewButton toolbar "gtk-quit" Nothing
+      statusLabel <- xmlGetWidget xml castToLabel "statusLabel"
+      set statusLabel [ labelText := "C'est au tour des blancs de jouer." ]
       widgetShowAll window
       let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
                             (widgetQueueDraw canvas)
+                            (\msg -> set statusLabel [ labelText := msg ])
       stateRef <- newIORef $ AppState {
                               position = startingPosition,
                               selectedSquare = Nothing,
                               currentMovesMap = Nothing,
-                              sideToPlay = White
+                              currentStatus = GameOngoing { sideToPlay = White }
                             }
       onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
       onButtonPress canvas $ handleButtonPress canvas appData stateRef
@@ -123,7 +132,7 @@ handleButtonPress canvas appData stateRef evt = do
 onClickedSquare :: Square -> AppData -> IORef AppState -> IO ()
 onClickedSquare square@(col,row) appData stateRef = do
   appState <- readIORef stateRef
-  when (sideToPlay appState == playerColor appData) $ do
+  when (currentStatus appState == (GameOngoing { sideToPlay = playerColor appData })) $ do
     case selectedSquare appState of
       Just selSq | selSq == square -> unselectSquare
                  | otherwise -> case M.lookup square =<< currentMovesMap appState of
@@ -149,10 +158,27 @@ selectSquare maybeSquare@(Just square) appData stateRef = do
 
 applyPlayerMove :: Move -> AppData -> IORef AppState -> IO ()
 applyPlayerMove move appData stateRef = do
-  modifyIORef stateRef $ \s -> s { position = applyMove move (playerColor appData) (position s),
-                                   sideToPlay = otherColor $ playerColor appData }
+  modifyIORef stateRef $ \s -> s { position = applyMove move (playerColor appData) (position s) }
+  updateStatusAfterMove appData stateRef
   writeChan (playerMovesChan appData) $ printMove move
 
+updateStatusAfterMove :: AppData -> IORef AppState -> IO ()
+updateStatusAfterMove appData stateRef = do
+  appState <- readIORef stateRef
+  let setNewStatus msg newStatus = do
+        modifyIORef stateRef $ \s -> s { currentStatus = newStatus }
+        setStatusMessage appData msg
+  case currentStatus appState of
+    GameOngoing { sideToPlay = color } -> do
+        let newSideToPlay = otherColor color
+            sideName White = "blancs"
+            sideName Black = "noirs"
+        if (isCheckmated newSideToPlay (position appState))
+          then setNewStatus (printf "Échec et mat ; les %s ont gagné." (sideName color))
+               $ Checkmate { gameWinner = color }
+          else setNewStatus (printf "C'est au tour des %s de jouer" (sideName newSideToPlay))
+               $ GameOngoing { sideToPlay = newSideToPlay }
+    _ -> return ()
 
 -- Timer-triggered actions --
 -----------------------------
@@ -160,12 +186,13 @@ applyPlayerMove move appData stateRef = do
 handleOpponentMoves :: AppData -> IORef AppState -> IO Bool
 handleOpponentMoves appData stateRef = do
   appState <- readIORef stateRef
-  when (sideToPlay appState /= playerColor appData) $ do
+  let opponentColor = otherColor (playerColor appData)
+  when (currentStatus appState == GameOngoing { sideToPlay = opponentColor }) $ do
     opponentHasPlayed <- not <$> isEmptyChan (opponentMovesChan appData)
     when opponentHasPlayed $ do
       opponentMove <- parseMove <$> readChan (opponentMovesChan appData)
-      modifyIORef stateRef (\s -> s { position = applyMove opponentMove (sideToPlay s) (position s),
-                                      sideToPlay = playerColor appData })
+      modifyIORef stateRef (\s -> s { position = applyMove opponentMove opponentColor (position s) })
+      updateStatusAfterMove appData stateRef
   requestRedraw appData
   return True
 

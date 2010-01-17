@@ -1,7 +1,8 @@
 module Common (startingPosition,
                applyMove,
                legalMoves,
-               legalMovesMap)
+               legalMovesMap,
+               isCheckmated)
 where
 
 import Control.Applicative
@@ -82,9 +83,32 @@ applyMove (EnPassant orig dest) color (Position oldBoard oldState) =
               newState = oldState { enPassantPossibility = Nothing }
               capturedPawnLocation = (fst dest, snd orig)
 
+
+-- 
+-- isCheckmated/legalMoves section
+-- NOTE : legalMoves filters the moves which leave the king in check,
+--        legalMoves' doesn't
 --
--- legalMoves section
---
+
+isCheckmated :: Color -> Position -> Bool
+isCheckmated color position =
+    sideIsInCheck color position && null (allLegalMovesForSide color position)
+
+sideIsInCheck :: Color -> Position -> Bool
+sideIsInCheck color position@(Position board _) = any threatensKing opponentMoves
+    where opponentMoves = concatMap (\(square, piece) -> legalMoves' piece square position) .
+                          filter ((/= color) . pieceColor . snd) $ M.toList board
+          pieceColor (Piece _ c) = c
+          threatensKing (StandardMove { moveDest = dest }) =
+              (Just dest) == maybeKingSquare
+          threatensKing _ = False
+          maybeKingSquare = (fst <$>) . find (((Piece King color) ==) . snd) $ M.toList board
+
+allLegalMovesForSide :: Color -> Position -> [Move]
+allLegalMovesForSide color position@(Position board _) =
+    concatMap (\(square, piece) -> legalMoves piece square position) pieces
+        where pieces = filter f . M.toList $ board
+              f (_, (Piece _ c)) = c == color
 
 legalMovesMap :: Piece -> Square -> Position -> Map Square Move
 legalMovesMap piece@(Piece _ color) square position = M.fromList assocList
@@ -103,18 +127,6 @@ legalMoves piece@(Piece _ color) square position = filter (not . leavesKingInChe
     where moves = legalMoves' piece square position
           leavesKingInCheck move = sideIsInCheck color (applyMove move color position)
 
-sideIsInCheck :: Color -> Position -> Bool
-sideIsInCheck color position@(Position board _) = any threatensKing opponentMoves
-    where opponentMoves = concatMap (\(square, piece) -> legalMoves' piece square position) .
-                          filter ((/= color) . pieceColor . snd) $ M.toList board
-          pieceColor (Piece _ c) = c
-          threatensKing (StandardMove { moveDest = dest }) =
-              (Just dest) == maybeKingSquare
-          threatensKing _ = False
-          maybeKingSquare = (fst <$>) . find (((Piece King color) ==) . snd) $ M.toList board
-
--- This version doesn't check if your king is in check after a move
--- (in this case, the move should be illegal)
 legalMoves' :: Piece -> Square -> Position -> [Move]
 legalMoves' piece@(Piece pieceType _) = f pieceType piece
     where f Pawn = pawnMoves
@@ -232,3 +244,4 @@ castlingRookDestCol Queenside = 4
 
 castlingColsInBetween Kingside = [6, 7]
 castlingColsInBetween Queenside = [2, 3, 4]
+

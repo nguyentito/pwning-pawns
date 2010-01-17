@@ -29,9 +29,8 @@
           </packing>
         </child>
         <child>
-          <widget class="GtkStatusbar" id="statusbar">
+          <widget class="GtkLabel" id="statusLabel">
             <property name="visible">True</property>
-            <property name="spacing">2</property>
           </widget>
           <packing>
             <property name="expand">False</property>
