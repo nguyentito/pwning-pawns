@@ -155,6 +155,7 @@ joinGame handle appData gameIDStr = do
                                  (otherColor . creatorColor $ game, handle)]
           sendStartGame gameID playerColorList
           return (M.insert gameID playingGame playingGamesMap)
+  sendGamesList appData
 
 sendStartGame :: GameID -> [(Color, Handle)] -> IO ()
 sendStartGame gameID = mapM_ f
