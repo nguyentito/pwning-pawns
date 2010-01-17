@@ -55,6 +55,8 @@ startGameWindow playerMovesChan opponentMovesChan playerColor = do
       Just xml <- xmlNew "client-game-window.glade"
       window <- xmlGetWidget xml castToWindow "window"
       canvas <- xmlGetWidget xml castToDrawingArea "canvas"
+      toolbar <- xmlGetWidget xml castToToolbar "toolbar"
+      toolbarAppendNewButton toolbar "gtk-quit" Nothing
       widgetShowAll window
       let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
                             (widgetQueueDraw canvas)
