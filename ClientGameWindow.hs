@@ -22,7 +22,6 @@ import Graphics.UI.Gtk.Gdk.Events
 import Graphics.UI.Gtk.Glade
 import Graphics.UI.Gtk.Cairo
 import Graphics.Rendering.Cairo
-import Graphics.Rendering.Cairo.Internal.Surfaces.PNG
 
 import AlgebraicNotation
 import ChessTypes
