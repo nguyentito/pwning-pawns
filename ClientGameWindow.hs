@@ -1,6 +1,4 @@
-module ClientGameWindow
-    (startGameWindow,
-     withGameWindowResourcesLoaded)
+module ClientGameWindow (startGameWindow)
 where
 
 import Control.Applicative
@@ -26,12 +24,12 @@ import Graphics.Rendering.Cairo
 import AlgebraicNotation
 import ChessTypes
 import Common
+import ClientThemeManager
 
 -- Main --
 ----------
 
 data AppData = AppData {
-      piecesImagesMap :: Map Piece Surface,
       playerMovesChan :: Chan String,
       opponentMovesChan :: Chan String,
       playerColor :: Color,
@@ -53,35 +51,31 @@ data GameStatus = GameOngoing { sideToPlay :: Color }
 
 startGameWindow :: Chan String -> Chan String -> Color -> IO Window
 startGameWindow playerMovesChan opponentMovesChan playerColor = do
-  maybePiecesImages <- readIORef piecesImagesRef
-  case maybePiecesImages of
-    Nothing -> error "You must call startGameWindow inside an action wrapped by withGameWindowResourcesLoaded"
-    Just piecesImagesMap -> do
-      Just xml <- xmlNew "client-game-window.glade"
-      window <- xmlGetWidget xml castToWindow "window"
-      canvas <- xmlGetWidget xml castToDrawingArea "canvas"
-      toolbar <- xmlGetWidget xml castToToolbar "toolbar"
-      quitButton <- toolbarAppendNewButton toolbar "gtk-quit" Nothing
-      statusLabel <- xmlGetWidget xml castToLabel "statusLabel"
-      set statusLabel [ labelText := "C'est au tour des blancs de jouer." ]
-      widgetShowAll window
-      let appData = AppData piecesImagesMap playerMovesChan opponentMovesChan playerColor
-                            (widgetQueueDraw canvas)
-                            (\msg -> set statusLabel [ labelText := msg ])
-      stateRef <- newIORef $ AppState {
-                              position = startingPosition,
-                              selectedSquare = Nothing,
-                              currentMovesMap = Nothing,
-                              currentStatus = GameOngoing { sideToPlay = White }
-                            }
-      onDelete window $ const (not <$> confirmQuitGame window)
-      onClicked quitButton $ do
-        userConfirmation <- confirmQuitGame window
-        when userConfirmation $ widgetDestroy window
-      onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
-      onButtonPress canvas $ handleButtonPress canvas appData stateRef
-      timeoutAdd (handleOpponentMoves appData stateRef) 100
-      return window
+  Just xml <- xmlNew "client-game-window.glade"
+  window <- xmlGetWidget xml castToWindow "window"
+  canvas <- xmlGetWidget xml castToDrawingArea "canvas"
+  toolbar <- xmlGetWidget xml castToToolbar "toolbar"
+  quitButton <- toolbarAppendNewButton toolbar "gtk-quit" Nothing
+  statusLabel <- xmlGetWidget xml castToLabel "statusLabel"
+  set statusLabel [ labelText := "C'est au tour des blancs de jouer." ]
+  widgetShowAll window
+  let appData = AppData playerMovesChan opponentMovesChan playerColor
+                        (widgetQueueDraw canvas)
+                        (\msg -> set statusLabel [ labelText := msg ])
+  stateRef <- newIORef $ AppState {
+                          position = startingPosition,
+                          selectedSquare = Nothing,
+                          currentMovesMap = Nothing,
+                          currentStatus = GameOngoing { sideToPlay = White }
+                        }
+  onDelete window $ const (not <$> confirmQuitGame window)
+  onClicked quitButton $ do
+    userConfirmation <- confirmQuitGame window
+    when userConfirmation $ widgetDestroy window
+  onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
+  onButtonPress canvas $ handleButtonPress canvas appData stateRef
+  timeoutAdd (handleOpponentMoves appData stateRef) 100
+  return window
 
 confirmQuitGame :: Window -> IO Bool
 confirmQuitGame window = do
@@ -91,39 +85,6 @@ confirmQuitGame window = do
   response <- dialogRun dialog
   widgetDestroy dialog
   return $ response == ResponseYes
-
--- Resources --
----------------
-
-piecesImagesRef :: IORef (Maybe (Map Piece Surface))
-piecesImagesRef = unsafePerformIO $ newIORef Nothing
-
-withGameWindowResourcesLoaded :: IO a -> IO a
-withGameWindowResourcesLoaded act = do
-  withPiecesImages $ \piecesImagesMap -> do
-    writeIORef piecesImagesRef (Just piecesImagesMap)
-    x <- act
-    writeIORef piecesImagesRef Nothing
-    return x
-
-withImageSurfacesFromPNGs :: [FilePath] -> ([Surface] -> IO a) -> IO a
-withImageSurfacesFromPNGs [] act = act []
-withImageSurfacesFromPNGs (fp:fps) act =
-    withImageSurfaceFromPNG fp $ \img -> withImageSurfacesFromPNGs fps (act . (img:))
- 
-withPiecesImages :: (Map Piece Surface -> IO a) -> IO a
-withPiecesImages act = withImageSurfacesFromPNGs filenameList
-                       $ \surfaceList -> act (M.fromList (zip pieceList surfaceList))
-    where pieceList = [ Piece piecetype color
-                        | piecetype <- piecetypeList, color <- [White, Black]]
-          piecetypeList = [King, Queen, Rook, Bishop, Knight, Pawn]
-          filenameList = map pieceToFilename pieceList
-          pieceToFilename (Piece piecetype color) = 
-              "fantasy-chess-pieces" </> (letter1 : letter2 : ".png")
-                  where letter1 = [(Black, 'b'), (White, 'w')] ! color
-                        letter2 = (zip piecetypeList "kqrbnp") ! piecetype
-          lst ! ix = fromJust $ lookup ix lst
-                        
 
 -- Event handling --
 --------------------
@@ -217,23 +178,21 @@ updateCanvas canvas appData stateRef = do
   (w, h) <- widgetGetSize canvas
   dw <- widgetGetDrawWindow canvas
   state <- readIORef stateRef
-  renderWithDrawable dw (drawBoard w h appData state)
+  withTheme $ \theme ->
+      renderWithDrawable dw (drawBoard w h theme appData state)
 
-darkTileColor = (110, 128, 158)
-lightTileColor = (209, 205, 184)
-
-drawBoard :: Int -> Int -> AppData -> AppState -> Render ()
-drawBoard w h appData appState = do
+drawBoard :: Int -> Int -> Theme -> AppData -> AppState -> Render ()
+drawBoard w h theme appData appState = do
   let c = fromIntegral $ (min w h) - 2
   translate 1 1
 
   -- dark color background (dark squares)
-  let (r,g,b) = darkTileColor in setSourceRGB (r/255) (g/255) (b/255)
+  let (r,g,b) = darkTileColor theme in setSourceRGB (r/255) (g/255) (b/255)
   rectangle 0 0 c c
   fill
   
   -- light squares
-  let (r,g,b) = lightTileColor in setSourceRGB (r/255) (g/255) (b/255)
+  let (r,g,b) = lightTileColor theme in setSourceRGB (r/255) (g/255) (b/255)
   let lightSquares = map snd . filter fst
                      . zip (cycle (take 8 (cycle [True, False]) ++ take 8 (cycle [False, True])))
                      $ [ (x/8,y/8) | x <- [0..7], y <- [0..7] ]
@@ -268,7 +227,7 @@ drawBoard w h appData appState = do
       stroke
 
   -- draw the pieces themselves
-  drawPosition c (piecesImagesMap appData) (position appState)
+  drawPosition c (piecesImagesMap theme) (position appState)
 
 drawPosition :: Double -> Map Piece Surface -> Position -> Render ()
 drawPosition c piecesImagesMap (Position piecesMap _) =

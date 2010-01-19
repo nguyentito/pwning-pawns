@@ -17,6 +17,7 @@ import qualified ListBox as LB
 import Util
 import ChessTypes
 import ClientGameWindow
+import ClientThemeManager
 
 type GameID = Int
 
@@ -61,9 +62,10 @@ loadGUI = do
       <*> xmlGetWidget xml castToButton   "cgdBtnCancel"
 
 main :: IO ()
-main = withSocketsDo . withGameWindowResourcesLoaded $ do
+main = withSocketsDo $ do
   connectionMVar <- newMVar Nothing
   initGUI
+  startThemeManager "default"
   gui <- loadGUI
   widgetShowAll (mainWindow gui)
   onDestroy (mainWindow gui) mainQuit
