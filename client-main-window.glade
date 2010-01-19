@@ -72,7 +72,7 @@
                 <child>
                   <widget class="GtkLabel" id="label1">
                     <property name="visible">True</property>
-                    <property name="label" translatable="yes">Parties en cours</property>
+                    <property name="label" translatable="yes">Parties joignables</property>
                     <property name="use_markup">True</property>
                   </widget>
                   <packing>
