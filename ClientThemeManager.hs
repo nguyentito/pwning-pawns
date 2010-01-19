@@ -9,6 +9,7 @@ where
 import Control.Applicative
 import Control.Concurrent
 import Data.IORef
+import Data.List
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
@@ -73,16 +74,23 @@ withTheme = withMVar themeMVar
 
 withThemeData :: String -> (Theme -> IO a) -> IO a
 withThemeData themeID act = do
-  -- withPiecesImagesFromDir ("themes" </> themeID)
-  --   $ \pim -> act (Theme { darkTileColor = (110, 128, 158),
-  --                          lightTileColor = (209, 205, 184),
-  --                          piecesImagesMap = pim
-  --                        }) <* putStrLn "baz"
+  plist <- loadPList $ "themes" </> themeID </> "themeconfig"
+  let strToTriplet str = read $ "(" ++ str ++ ")"
+      getTriplet key = strToTriplet . fromJust . lookup key $ plist
   pim <- loadPiecesImagesFromDir $ "themes" </> themeID
-  act $ Theme { darkTileColor = (110, 128, 158),
-                lightTileColor = (209, 205, 184),
+  act $ Theme { darkTileColor = getTriplet "dark-tile-color",
+                lightTileColor = getTriplet "light-tile-color",
                 piecesImagesMap = pim
               }
+
+type PropertyList = [Property]
+type Property     = (String, String)
+
+loadPList :: FilePath -> IO PropertyList
+loadPList file = map f . lines <$> readFile file
+    where f line = let (key, rest) = span (/='=') line in
+                   case rest of []    -> (key, "")
+                                _:val -> (key, val)
             
 -- Unfortunately, using withImageSurfaceFromPNG creates bugs, so,
 -- for now, we are going to use imageSurfaceCreateFromPNG and not care about
