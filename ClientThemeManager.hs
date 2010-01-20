@@ -3,7 +3,9 @@ module ClientThemeManager (startThemeManager,
                            Theme,
                            darkTileColor,
                            lightTileColor,
-                           piecesImagesMap)
+                           piecesImagesMap,
+                           listAvailableThemes,
+                           selectTheme)
 where
 
 import Control.Applicative
@@ -56,7 +58,6 @@ newThemeChan = unsafePerformIO newChan
 
 startThemeManager :: String -> IO ()
 startThemeManager defaultThemeName = do
-  print =<< listAvailableThemes
   themeMVar `seq` newThemeChan `seq` forkIO $ loop defaultThemeName
   return ()
     where loop themeName = do
@@ -129,7 +130,7 @@ withImageSurfacesFromPNGs [] act = act []
 withImageSurfacesFromPNGs (fp:fps) act =
     withImageSurfaceFromPNG fp $ \img -> withImageSurfacesFromPNGs fps (act . (img:))
 
--- Selecting a theme with a GUI
+-- Selecting a theme
 
 listAvailableThemes :: IO [(String, String)]
 listAvailableThemes = do
@@ -145,4 +146,5 @@ listAvailableThemes = do
             findThemeName dir = (fromJust . lookup "name") <$>
                                 loadPList ("themes" </> dir </> "themeconfig")
 
-
+selectTheme :: String -> IO ()
+selectTheme themeID = writeChan newThemeChan themeID

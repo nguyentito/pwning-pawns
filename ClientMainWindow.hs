@@ -14,6 +14,7 @@ import Graphics.UI.Gtk hiding (disconnect)
 import Graphics.UI.Gtk.Glade
 
 import qualified ListBox as LB
+import OkCancelDialog
 import Util
 import ChessTypes
 import ClientGameWindow
@@ -79,18 +80,6 @@ main = withSocketsDo $ do
   onClicked (btnJoin gui) $ joinGame connectionMVar gui
   timeoutAddFull (True <$ yield) priorityDefaultIdle 100
   mainGUI
-
-runOkCancelDialog :: Dialog -> Button -> Button -> IO () -> IO ()
-runOkCancelDialog dialog okBtn cancelBtn act = do
-  -- All the established signal connections are registered and disconnected at the end,
-  -- to prevent a signal being connected twice after runConnectDialog runs twice.
-  idOk <- onClicked okBtn $ dialogResponse dialog ResponseOk
-  idCancel <- onClicked cancelBtn $ dialogResponse dialog ResponseCancel
-  response <- dialogRun dialog
-  when (response == ResponseOk) act
-  signalDisconnect idOk
-  signalDisconnect idCancel
-  widgetHide dialog
 
 runConnectDialog :: GUI -> MVar (Maybe Handle) -> IO ()
 runConnectDialog gui connectionMVar = do

@@ -24,6 +24,7 @@ import Graphics.Rendering.Cairo
 import AlgebraicNotation
 import ChessTypes
 import Common
+import OkCancelDialog
 import ClientThemeManager
 
 -- Main --
@@ -54,11 +55,13 @@ startGameWindow playerMovesChan opponentMovesChan playerColor = do
   Just xml <- xmlNew "client-game-window.glade"
   window <- xmlGetWidget xml castToWindow "window"
   canvas <- xmlGetWidget xml castToDrawingArea "canvas"
-  toolbar <- xmlGetWidget xml castToToolbar "toolbar"
-  quitButton <- toolbarAppendNewButton toolbar "gtk-quit" Nothing
   statusLabel <- xmlGetWidget xml castToLabel "statusLabel"
   set statusLabel [ labelText := "C'est au tour des blancs de jouer." ]
+  themeLabel <- xmlGetWidget xml castToLabel "themeLabel"
+  set themeLabel [ labelText := "Thème actuel : Default Theme" ]
+  selectThemeBtn <- xmlGetWidget xml castToButton "selectThemeBtn"
   widgetShowAll window
+
   let appData = AppData playerMovesChan opponentMovesChan playerColor
                         (widgetQueueDraw canvas)
                         (\msg -> set statusLabel [ labelText := msg ])
@@ -68,11 +71,10 @@ startGameWindow playerMovesChan opponentMovesChan playerColor = do
                           currentMovesMap = Nothing,
                           currentStatus = GameOngoing { sideToPlay = White }
                         }
-  onDelete window $ const (not <$> confirmQuitGame window)
-  onClicked quitButton $ do
-    userConfirmation <- confirmQuitGame window
-    when userConfirmation $ widgetDestroy window
-  onExpose canvas $ const (True <$ updateCanvas canvas appData stateRef)
+
+  onClicked selectThemeBtn $ showThemeSelectionDialog xml
+  onDelete window $ \_ -> not <$> confirmQuitGame window
+  onExpose canvas $ \_ -> True <$ updateCanvas canvas appData stateRef
   onButtonPress canvas $ handleButtonPress canvas appData stateRef
   timeoutAdd (handleOpponentMoves appData stateRef) 100
   return window
@@ -241,3 +243,25 @@ drawPiece c piecesImagesMap (col, row) piece = do
   setSourceSurface (piecesImagesMap M.! piece) 0 0
   paint
   restore
+
+-- Theme selection --
+---------------------
+
+showThemeSelectionDialog :: GladeXML -> IO ()
+showThemeSelectionDialog xml = do
+  dialog    <- xmlGetWidget xml castToDialog   "themeSelectionDialog"
+  okBtn     <- xmlGetWidget xml castToButton   "tsdOkBtn"
+  cancelBtn <- xmlGetWidget xml castToButton   "tsdCancelBtn"
+  comboBox  <- xmlGetWidget xml castToComboBox "tsdComboBox"
+  
+  model <- listStoreNew =<< listAvailableThemes
+  cellLayoutClear comboBox
+  cell <- cellRendererTextNew
+  cellLayoutPackStart comboBox cell True
+  cellLayoutSetAttributes comboBox cell model
+                          (\(themeID, themeName) -> [ cellText := themeName ])
+  set comboBox [ comboBoxModel := model ]
+
+  runOkCancelDialog dialog okBtn cancelBtn $ do
+    selectTheme . fst =<< listStoreGetValue model =<< get comboBox comboBoxActive
+
