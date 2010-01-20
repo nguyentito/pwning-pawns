@@ -263,5 +263,7 @@ showThemeSelectionDialog xml = do
   set comboBox [ comboBoxModel := model ]
 
   runOkCancelDialog dialog okBtn cancelBtn $ do
-    selectTheme . fst =<< listStoreGetValue model =<< get comboBox comboBoxActive
+    selectionIndex <- get comboBox comboBoxActive
+    unless (selectionIndex < 0) $ do
+      selectTheme . fst =<< listStoreGetValue model selectionIndex
 
