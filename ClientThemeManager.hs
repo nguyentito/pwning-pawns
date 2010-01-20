@@ -11,6 +11,7 @@ where
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
+import Data.Char
 import Data.IORef
 import Data.List
 import Data.Map (Map)
@@ -100,18 +101,6 @@ loadPList file = map f . lines <$> readFile file
 -- for now, we are going to use imageSurfaceCreateFromPNG and not care about
 -- what happens when a new theme is loaded and the old images
 -- become useless
-withPiecesImagesFromDir :: FilePath -> (Map Piece Surface -> IO a) -> IO a
-withPiecesImagesFromDir imgDir act = withImageSurfacesFromPNGs filenameList
-                                     $ \surfaceList -> act (M.fromList (zip pieceList surfaceList))
-    where pieceList = [ Piece piecetype color
-                        | piecetype <- piecetypeList, color <- [White, Black]]
-          piecetypeList = [King, Queen, Rook, Bishop, Knight, Pawn]
-          filenameList = map pieceToFilename pieceList
-          pieceToFilename (Piece piecetype color) = imgDir </> (letter1 : letter2 : ".png")
-                  where letter1 = [(Black, 'b'), (White, 'w')] ! color
-                        letter2 = (zip piecetypeList "kqrbnp") ! piecetype
-          lst ! ix = fromJust $ lookup ix lst
-
 loadPiecesImagesFromDir :: FilePath -> IO (Map Piece Surface)
 loadPiecesImagesFromDir imgDir = do
   surfaceList <- mapM imageSurfaceCreateFromPNG filenameList
@@ -120,10 +109,8 @@ loadPiecesImagesFromDir imgDir = do
                         | piecetype <- piecetypeList, color <- [White, Black]]
           piecetypeList = [King, Queen, Rook, Bishop, Knight, Pawn]
           filenameList = map pieceToFilename pieceList
-          pieceToFilename (Piece piecetype color) = imgDir </> (letter1 : letter2 : ".png")
-                  where letter1 = [(Black, 'b'), (White, 'w')] ! color
-                        letter2 = (zip piecetypeList "kqrbnp") ! piecetype
-          lst ! ix = fromJust $ lookup ix lst
+          pieceToFilename (Piece piecetype color) =
+              imgDir </> map toLower (show color ++ "-" ++ show piecetype ++ ".png")
 
 withImageSurfacesFromPNGs :: [FilePath] -> ([Surface] -> IO a) -> IO a
 withImageSurfacesFromPNGs [] act = act []

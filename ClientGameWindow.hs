@@ -239,7 +239,7 @@ drawPiece :: Double -> Map Piece Surface -> Square -> Piece -> Render ()
 drawPiece c piecesImagesMap (col, row) piece = do
   save
   translate ((fromIntegral col - 1) * c / 8) ((8 - fromIntegral row) * c / 8)
-  scale ((c/8)/192) ((c/8)/192)
+  scale ((c/8)/144) ((c/8)/144)
   setSourceSurface (piecesImagesMap M.! piece) 0 0
   paint
   restore
