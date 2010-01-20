@@ -8,11 +8,13 @@ where
 
 import Control.Applicative
 import Control.Concurrent
+import Control.Monad
 import Data.IORef
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
+import System.Directory
 import System.FilePath
 import System.IO.Unsafe
 
@@ -54,6 +56,7 @@ newThemeChan = unsafePerformIO newChan
 
 startThemeManager :: String -> IO ()
 startThemeManager defaultThemeName = do
+  print =<< listAvailableThemes
   themeMVar `seq` newThemeChan `seq` forkIO $ loop defaultThemeName
   return ()
     where loop themeName = do
@@ -126,5 +129,20 @@ withImageSurfacesFromPNGs [] act = act []
 withImageSurfacesFromPNGs (fp:fps) act =
     withImageSurfaceFromPNG fp $ \img -> withImageSurfacesFromPNGs fps (act . (img:))
 
--- A pretty GUI to change themes
+-- Selecting a theme with a GUI
+
+listAvailableThemes :: IO [(String, String)]
+listAvailableThemes = do
+  subdirs <- listSubdirs "themes"
+  themeDirs <- filterM containsThemeConfig subdirs
+  forM themeDirs $ \dir -> do
+    themeName <- findThemeName dir
+    return (dir, themeName)
+      where listSubdirs dir = filter (liftA2 (&&) (/=".") (/="..")) <$>
+                              (filterM (doesDirectoryExist . (dir </>)) =<<
+                               getDirectoryContents dir)
+            containsThemeConfig dir = doesFileExist $ "themes" </> dir </> "themeconfig"
+            findThemeName dir = (fromJust . lookup "name") <$>
+                                loadPList ("themes" </> dir </> "themeconfig")
+
 
